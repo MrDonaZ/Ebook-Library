@@ -1,3 +1,5 @@
+import type { ReaderState, ReadingStatus } from "./types";
+
 export function generateId(): string {
 	return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -82,4 +84,20 @@ export function debounce<T extends (...args: unknown[]) => void>(
 		if (timer) window.clearTimeout(timer);
 		timer = window.setTimeout(() => fn(...args), delay);
 	};
+}
+
+/** Builds the new state for a reader moving to `status`. */
+export function nextReaderState(prev: ReaderState, status: ReadingStatus): ReaderState {
+	switch (status) {
+		case "unread":
+			return { status, progress: 0, finishedAt: null };
+		case "reading":
+			return { status, progress: prev.status === "completed" ? 0 : prev.progress, finishedAt: null };
+		case "completed":
+			return {
+				status,
+				progress: 100,
+				finishedAt: prev.status === "completed" && prev.finishedAt ? prev.finishedAt : Date.now(),
+			};
+	}
 }

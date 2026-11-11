@@ -7,9 +7,18 @@ import {
 	CATEGORY_ORDER,
 	CoverType,
 	NewBookInput,
+	ReaderState,
 	ReadingStatus,
+	STATUS_META,
 } from "../types";
-import { clamp, fromDateInputValue, getBasename, placeholderGradient, toDateInputValue } from "../utils";
+import {
+	clamp,
+	fromDateInputValue,
+	getBasename,
+	nextReaderState,
+	placeholderGradient,
+	toDateInputValue,
+} from "../utils";
 import { ConfirmModal } from "./ConfirmModal";
 import { FileSuggestModal } from "./FileSuggestModal";
 import { PromptModal } from "./PromptModal";
@@ -26,14 +35,11 @@ export class BookModal extends Modal {
 	private title: string;
 	private author: string;
 	private category: BookCategory;
-	private status: ReadingStatus;
-	private progress: number;
 	private rating: number;
 	private description: string;
 	private tags: string[];
 	private totalPages: number | null;
-	private finishedBy: string[];
-	private finishedDates: Record<string, number>;
+	private readerStates: Record<string, ReaderState>;
 	private coverType: CoverType;
 	private cover: string;
 
@@ -44,7 +50,6 @@ export class BookModal extends Modal {
 	private tagsChipsEl!: HTMLElement;
 	private tagsInputEl!: HTMLInputElement;
 	private starsEl!: HTMLElement;
-	private statusDropdownEl?: HTMLSelectElement;
 
 	constructor(
 		plugin: EbookLibraryPlugin,
@@ -60,14 +65,14 @@ export class BookModal extends Modal {
 		this.title = existing?.title ?? "";
 		this.author = existing?.author ?? "";
 		this.category = existing?.category ?? "book";
-		this.status = existing?.status ?? "unread";
-		this.progress = existing?.progress ?? 0;
 		this.rating = existing?.rating ?? 0;
 		this.description = existing?.description ?? "";
 		this.tags = existing ? [...existing.tags] : [];
 		this.totalPages = existing?.totalPages ?? null;
-		this.finishedBy = existing ? [...existing.finishedBy] : [];
-		this.finishedDates = existing ? { ...existing.finishedDates } : {};
+		this.readerStates = {};
+		for (const [id, state] of Object.entries(existing?.readerStates ?? {})) {
+			this.readerStates[id] = { ...state };
+		}
 		this.coverType = existing?.coverType ?? "none";
 		this.cover = existing?.cover ?? "";
 	}
@@ -215,8 +220,7 @@ export class BookModal extends Modal {
 		this.buildDescriptionField(form);
 
 		this.addSectionTitle(form, "Progress & rating");
-		this.buildStatusField(form);
-		this.buildFinishedByField(form);
+		this.buildReaderStatesField(form);
 		this.buildTotalPagesField(form);
 		this.buildRatingField(form);
 	}
@@ -367,69 +371,56 @@ export class BookModal extends Modal {
 		textarea.addEventListener("input", () => (this.description = textarea.value));
 	}
 
-	private buildStatusField(form: HTMLElement) {
+	private buildReaderStatesField(form: HTMLElement) {
+		const readers = this.plugin.settings.readers;
 		const row = form.createDiv({ cls: "el-field" });
 		row.createDiv({ cls: "el-field-label", text: "Reading status" });
-		const select = row.createDiv({ cls: "el-field-control" }).createEl("select", { cls: "el-select" });
-		select.createEl("option", { value: "unread", text: "Unread" });
-		select.createEl("option", { value: "reading", text: "Reading" });
-		select.createEl("option", { value: "completed", text: "Completed" });
-		select.value = this.status;
-		this.statusDropdownEl = select;
-		select.addEventListener("change", () => {
-			this.status = select.value as ReadingStatus;
-		});
-	}
-
-	private buildFinishedByField(form: HTMLElement) {
-		const readers = this.plugin.settings.readers;
-		if (readers.length === 0) return;
-		const row = form.createDiv({ cls: "el-field" });
-		row.createDiv({ cls: "el-field-label", text: "Finished by" });
 		row.createDiv({
 			cls: "el-field-desc",
-			text: "Who has finished this book, and when. Readers are configured in settings.",
+			text: "Each reader's status, and when they finished. Readers are configured in settings.",
 		});
-		const control = row.createDiv({ cls: "el-field-control el-reader-checkboxes" });
+		const control = row.createDiv({ cls: "el-field-control el-reader-states" });
+		const statuses: ReadingStatus[] = ["unread", "reading", "completed"];
+
 		for (const reader of readers) {
 			const readerRow = control.createDiv({ cls: "el-reader-row" });
-			const label = readerRow.createEl("label", { cls: "el-reader-checkbox" });
-			const checkbox = label.createEl("input", { type: "checkbox" });
-			checkbox.checked = this.finishedBy.includes(reader.id);
-			label.createSpan({ text: reader.name });
+			readerRow.createSpan({ cls: "el-reader-name", text: reader.name });
+
+			const select = readerRow.createEl("select", {
+				cls: "el-select",
+				attr: { "aria-label": `Reading status of ${reader.name}` },
+			});
+			for (const status of statuses) {
+				select.createEl("option", { value: status, text: STATUS_META[status].label });
+			}
 
 			const dateInput = readerRow.createEl("input", {
 				type: "date",
 				cls: "el-text-input el-reader-date",
 				attr: { "aria-label": `Date ${reader.name} finished this book` },
 			});
-			const existingDate = this.finishedDates[reader.id];
-			if (existingDate) dateInput.value = toDateInputValue(existingDate);
-			dateInput.disabled = !checkbox.checked;
-			dateInput.addEventListener("change", () => {
-				const ts = fromDateInputValue(dateInput.value);
-				if (ts === null) delete this.finishedDates[reader.id];
-				else this.finishedDates[reader.id] = ts;
-			});
 
-			checkbox.addEventListener("change", () => {
-				this.finishedBy = checkbox.checked
-					? [...this.finishedBy.filter((id) => id !== reader.id), reader.id]
-					: this.finishedBy.filter((id) => id !== reader.id);
-				dateInput.disabled = !checkbox.checked;
-				if (checkbox.checked) {
-					// Default to today; the user can change it.
-					if (!this.finishedDates[reader.id]) this.finishedDates[reader.id] = Date.now();
-					dateInput.value = toDateInputValue(this.finishedDates[reader.id]);
-				} else {
-					delete this.finishedDates[reader.id];
-					dateInput.value = "";
-				}
-				// Someone finished it: the book is completed.
-				if (checkbox.checked && this.status !== "completed") {
-					this.status = "completed";
-					if (this.statusDropdownEl) this.statusDropdownEl.value = "completed";
-				}
+			const sync = () => {
+				const state = this.readerStates[reader.id];
+				const status = state?.status ?? "unread";
+				select.value = status;
+				dateInput.toggle(status === "completed");
+				dateInput.value = state?.finishedAt ? toDateInputValue(state.finishedAt) : "";
+			};
+			sync();
+
+			select.addEventListener("change", () => {
+				const prev = this.readerStates[reader.id] ?? { status: "unread", progress: 0, finishedAt: null };
+				// Moving to "completed" defaults the finish date to today; the user can change it.
+				this.readerStates[reader.id] = nextReaderState(
+					prev,
+					select.value as ReadingStatus
+				);
+				sync();
+			});
+			dateInput.addEventListener("change", () => {
+				const state = this.readerStates[reader.id];
+				if (state) state.finishedAt = fromDateInputValue(dateInput.value);
 			});
 		}
 	}
@@ -529,12 +520,9 @@ export class BookModal extends Modal {
 			description: this.description.trim(),
 			tags: this.tags,
 			category: this.category,
-			status: this.status,
-			progress: this.status === "completed" ? 100 : this.existing?.progress ?? 0,
+			readerStates: this.readerStates,
 			rating: this.rating,
 			totalPages: this.totalPages,
-			finishedBy: this.finishedBy,
-			finishedDates: this.finishedDates,
 			lastOpened: this.existing?.lastOpened ?? null,
 		};
 

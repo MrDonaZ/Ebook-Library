@@ -740,9 +740,18 @@
 
 .el-tag-pill-reader {
 	gap: 3px;
+}
+
+.el-tag-pill-reader.is-completed {
 	color: var(--color-green, var(--el-text-muted));
 	background: rgba(var(--color-green-rgb, 0, 160, 80), 0.1);
 	border-color: rgba(var(--color-green-rgb, 0, 160, 80), 0.3);
+}
+
+.el-tag-pill-reader.is-reading {
+	color: var(--color-blue, var(--el-text-muted));
+	background: rgba(var(--color-blue-rgb, 0, 120, 220), 0.1);
+	border-color: rgba(var(--color-blue-rgb, 0, 120, 220), 0.3);
 }
 
 .el-tag-pill-reader-icon {
@@ -979,7 +988,7 @@
 .el-field-control {
 	width: 100%;
 }
-.el-reader-checkboxes {
+.el-reader-states {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
@@ -999,9 +1008,6 @@
 	max-width: 170px;
 }
 
-.el-reader-date:disabled {
-	opacity: 0.4;
-}
 
 .el-tag-pill-reader-date {
 	font-weight: 400;
@@ -1013,11 +1019,14 @@
 	content: "· ";
 }
 
-.el-reader-checkbox {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	cursor: pointer;
+.el-reader-name {
+	flex: 1 1 80px;
+	font-weight: 600;
+	font-size: 0.9em;
+}
+
+.el-reader-states .el-reader-row .el-select {
+	width: auto;
 }
 
 .el-field-control-row {

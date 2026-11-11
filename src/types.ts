@@ -24,20 +24,25 @@ export interface Book {
 	description: string;
 	tags: string[];
 	category: BookCategory;
-	status: ReadingStatus;
-	/** 0-100 */
-	progress: number;
+	/** Reading state of each reader (reader id -> state). Missing readers are "unread". */
+	readerStates: Record<string, ReaderState>;
 	/** 0-5, 0 = unrated */
 	rating: number;
 	dateAdded: number;
 	dateModified: number;
 	lastOpened: number | null;
 	totalPages: number | null;
-	/** IDs of the readers (see settings) who finished this book. */
-	finishedBy: string[];
-	/** When each reader finished the book (reader id -> timestamp). May be missing for older entries. */
-	finishedDates: Record<string, number>;
 }
+
+export interface ReaderState {
+	status: ReadingStatus;
+	/** 0-100 */
+	progress: number;
+	/** When the reader finished the book; null if unknown or not finished. */
+	finishedAt: number | null;
+}
+
+export const DEFAULT_READER_STATE: ReaderState = { status: "unread", progress: 0, finishedAt: null };
 
 export interface Reader {
 	id: string;
@@ -50,8 +55,8 @@ export type SortKey = "title" | "author" | "dateAdded" | "lastOpened" | "progres
 export type SortDirection = "asc" | "desc";
 export type StatusFilter = "all" | ReadingStatus;
 export type CategoryFilter = "all" | BookCategory;
-/** "all", "none" (finished by nobody) or a reader id. */
-export type ReaderFilter = string;
+/** "all" (everyone) or a reader id. */
+export type ActiveReader = string;
 export type CardSize = "small" | "medium" | "large";
 
 export interface EbookLibrarySettings {
@@ -62,6 +67,8 @@ export interface EbookLibrarySettings {
 	sortDirection: SortDirection;
 	openOnStartup: boolean;
 	readers: Reader[];
+	/** Whose reading states the library shows: "all" or a reader id. */
+	activeReader: ActiveReader;
 }
 
 export const DEFAULT_SETTINGS: EbookLibrarySettings = {
@@ -75,6 +82,7 @@ export const DEFAULT_SETTINGS: EbookLibrarySettings = {
 		{ id: "reader-1", name: "Reader 1" },
 		{ id: "reader-2", name: "Reader 2" },
 	],
+	activeReader: "all",
 };
 
 export interface CategoryMeta {
