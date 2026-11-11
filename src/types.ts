@@ -12,8 +12,12 @@ export type ReadingStatus = "unread" | "reading" | "completed";
 
 export type CoverType = "vault" | "url" | "none";
 
+/** "manual": added by hand. "note": a Markdown note in the book folder, kept in sync with its properties. */
+export type BookSource = "manual" | "note";
+
 export interface Book {
 	id: string;
+	source: BookSource;
 	/** Vault-relative path to the underlying file this entry represents. */
 	filePath: string;
 	title: string;
@@ -21,6 +25,10 @@ export interface Book {
 	coverType: CoverType;
 	/** Vault-relative path or external URL, depending on coverType. */
 	cover: string;
+	/** True when the cover currently comes from the note's properties. */
+	coverFromNote?: boolean;
+	/** The book was added by hand before it became note-backed; it goes back to manual if it leaves the folder. */
+	addedManually?: boolean;
 	description: string;
 	tags: string[];
 	category: BookCategory;
@@ -47,6 +55,8 @@ export const DEFAULT_READER_STATE: ReaderState = { status: "unread", progress: 0
 export interface Reader {
 	id: string;
 	name: string;
+	/** Note property holding the date this reader finished a book. Defaults to the reader's name. */
+	property?: string;
 }
 
 export type NewBookInput = Omit<Book, "id" | "dateAdded" | "dateModified">;
@@ -65,6 +75,16 @@ export interface EbookLibrarySettings {
 	sortDirection: SortDirection;
 	openOnStartup: boolean;
 	readers: Reader[];
+	/** Folder whose Markdown notes are books ("" = off). */
+	sourceFolder: string;
+	propAuthor: string;
+	/** Comma-separated: the first one that has a value is used. */
+	propCover: string;
+	propStatus: string;
+	/** Comma-separated accepted values; the first one is written. */
+	statusCompleted: string;
+	statusReading: string;
+	statusUnread: string;
 }
 
 export const DEFAULT_SETTINGS: EbookLibrarySettings = {
@@ -78,6 +98,13 @@ export const DEFAULT_SETTINGS: EbookLibrarySettings = {
 		{ id: "reader-1", name: "Reader 1" },
 		{ id: "reader-2", name: "Reader 2" },
 	],
+	sourceFolder: "",
+	propAuthor: "Author",
+	propCover: "cover, banner, image",
+	propStatus: "Status",
+	statusCompleted: "Letto",
+	statusReading: "In lettura",
+	statusUnread: "Da leggere",
 };
 
 export interface CategoryMeta {

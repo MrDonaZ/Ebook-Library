@@ -762,6 +762,12 @@ export class LibraryView extends ItemView {
 			}
 		}
 
+		// Note-backed books are managed by the book folder, so they can't be removed here.
+		if (book.source === "note") {
+			menu.showAtMouseEvent(evt);
+			return;
+		}
+
 		menu.addSeparator();
 		menu.addItem((item) =>
 			item

@@ -2,6 +2,17 @@ import { App, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from "o
 import type EbookLibraryPlugin from "../main";
 import { ConfirmModal } from "../modals/ConfirmModal";
 
+/** Settings that change how notes are read: re-sync the folder when they change. */
+const NOTE_KEYS = [
+	"sourceFolder",
+	"propAuthor",
+	"propCover",
+	"propStatus",
+	"statusCompleted",
+	"statusReading",
+	"statusUnread",
+];
+
 export class EbookLibrarySettingTab extends PluginSettingTab {
 	plugin: EbookLibraryPlugin;
 
@@ -39,6 +50,45 @@ export class EbookLibrarySettingTab extends PluginSettingTab {
 				},
 			},
 			{
+				type: "group",
+				heading: "Book notes",
+				items: [
+					{
+						name: "Book folder",
+						desc: "Every note in this folder (and its subfolders) is a book. Leave empty to only add books by hand.",
+						control: { type: "text", key: "sourceFolder", placeholder: "e.g. Libri" },
+					},
+					{
+						name: "Author property",
+						desc: "Links like [[Alessandro Robecchi]] are shown as plain names.",
+						control: { type: "text", key: "propAuthor", placeholder: "Author" },
+					},
+					{
+						name: "Cover properties",
+						desc: "Comma-separated; the first one with an image or URL wins. Without one, the first image in the note is used.",
+						control: { type: "text", key: "propCover", placeholder: "cover, banner, image" },
+					},
+					{
+						name: "Status property",
+						desc: "Overall status of the book. A date in a reader's property means that reader finished it; for the others, this status decides.",
+						control: { type: "text", key: "propStatus", placeholder: "Status" },
+					},
+					{
+						name: "Status values: finished",
+						desc: "Comma-separated values that mean finished. The first one is written.",
+						control: { type: "text", key: "statusCompleted", placeholder: "Letto" },
+					},
+					{
+						name: "Status values: reading",
+						control: { type: "text", key: "statusReading", placeholder: "In lettura" },
+					},
+					{
+						name: "Status values: to read",
+						control: { type: "text", key: "statusUnread", placeholder: "Da leggere" },
+					},
+				],
+			},
+			{
 				type: "list",
 				heading: "Readers",
 				emptyState: "No readers yet. Add one to track who finished each book.",
@@ -68,8 +118,21 @@ export class EbookLibrarySettingTab extends PluginSettingTab {
 									reader.name = name;
 									await this.plugin.saveSettings();
 									this.plugin.refreshViews();
+									if (!reader.property) this.plugin.requestNoteSync();
 								})
 						);
+						// Note property with this reader's finish date (defaults to the name).
+						setting.addText((text) => {
+							text
+								.setPlaceholder(`Date property: ${reader.name}`)
+								.setValue(reader.property ?? "")
+								.onChange(async (value) => {
+									reader.property = value.trim() || undefined;
+									await this.plugin.saveSettings();
+									this.plugin.requestNoteSync();
+								});
+							text.inputEl.setAttribute("aria-label", "Note property with this reader's finish date");
+						});
 					},
 				})),
 			},
@@ -127,6 +190,7 @@ export class EbookLibrarySettingTab extends PluginSettingTab {
 	async setControlValue(key: string, value: unknown): Promise<void> {
 		await super.setControlValue(key, value);
 		this.plugin.refreshViews();
+		if (NOTE_KEYS.includes(key)) this.plugin.requestNoteSync();
 	}
 
 	private async exportLibrary(): Promise<void> {

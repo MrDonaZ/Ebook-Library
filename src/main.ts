@@ -11,7 +11,8 @@ import {
 import { LibraryView, VIEW_TYPE_LIBRARY } from "./view/LibraryView";
 import { EbookLibrarySettingTab } from "./settings/SettingsTab";
 import { BookModal } from "./modals/BookModal";
-import { generateId, nextReaderState, readerColor } from "./utils";
+import { debounce, generateId, nextReaderState, readerColor } from "./utils";
+import { NoteSync } from "./notes";
 
 /** Stored per device (not synced), so each person's phone remembers who is using it. */
 const ACTIVE_READER_KEY = "ebook-library-active-reader";
@@ -20,9 +21,15 @@ export default class EbookLibraryPlugin extends Plugin {
 	settings!: EbookLibrarySettings;
 	/** Reader this device is viewing as; null = everyone. */
 	private activeReader: string | null = null;
+	notes!: NoteSync;
+	/** Re-reads the book folder shortly after a burst of changes. */
+	requestNoteSync = debounce(() => {
+		void this.syncNotes();
+	}, 400);
 
 	async onload() {
 		await this.loadSettings();
+		this.notes = new NoteSync(this);
 
 		this.registerView(VIEW_TYPE_LIBRARY, (leaf) => new LibraryView(leaf, this));
 
@@ -65,10 +72,34 @@ export default class EbookLibraryPlugin extends Plugin {
 					void this.saveSettings();
 					this.refreshViews();
 				}
+				// A note may have moved into or out of the book folder.
+				if (this.notes.folder) this.requestNoteSync();
+			})
+		);
+
+		// Book notes: follow edits to their properties, and notes being added or deleted.
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (file) => {
+				if (!this.notes.isBookNote(file)) return;
+				if (this.notes.syncFile(file)) {
+					void this.saveSettings();
+					this.refreshViews();
+				}
+			})
+		);
+		this.registerEvent(
+			this.app.vault.on("delete", () => {
+				if (this.notes.folder) this.requestNoteSync();
+			})
+		);
+		this.registerEvent(
+			this.app.metadataCache.on("resolved", () => {
+				if (this.notes.folder) this.requestNoteSync();
 			})
 		);
 
 		this.app.workspace.onLayoutReady(() => {
+			void this.syncNotes();
 			if (this.settings.openOnStartup) {
 				void this.activateView();
 			}
@@ -114,6 +145,7 @@ export default class EbookLibraryPlugin extends Plugin {
 			finishedBy?: string[];
 			finishedDates?: Record<string, number>;
 		};
+		if (book.source !== "note") book.source = "manual";
 		if (!legacy.readerStates || typeof legacy.readerStates !== "object") {
 			const states: Record<string, ReaderState> = {};
 			const finishedBy = Array.isArray(legacy.finishedBy) ? legacy.finishedBy : [];
@@ -141,6 +173,14 @@ export default class EbookLibraryPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	/** Re-reads every note in the book folder. */
+	async syncNotes(): Promise<void> {
+		if (this.notes.syncAll()) {
+			await this.saveSettings();
+			this.refreshViews();
+		}
 	}
 
 	async activateView() {
@@ -177,6 +217,9 @@ export default class EbookLibraryPlugin extends Plugin {
 			dateModified: now,
 		};
 		this.settings.books.push(book);
+		// A note added by hand from inside the book folder is tied to its properties right away.
+		const file = this.app.vault.getAbstractFileByPath(book.filePath);
+		if (this.notes.isBookNote(file)) this.notes.syncFile(file);
 		await this.saveSettings();
 		this.refreshViews();
 		new Notice(`Added "${book.title}" to your library`);
@@ -186,6 +229,18 @@ export default class EbookLibraryPlugin extends Plugin {
 	async updateBook(id: string, changes: Partial<Book>): Promise<void> {
 		const book = this.settings.books.find((b) => b.id === id);
 		if (!book) return;
+		// Note-backed books: reading progress lives in the note's properties.
+		if (
+			book.source === "note" &&
+			changes.readerStates &&
+			JSON.stringify(changes.readerStates) !== JSON.stringify(book.readerStates)
+		) {
+			try {
+				await this.notes.writeStates(book, changes.readerStates);
+			} catch (e) {
+				new Notice(`Could not update the note's properties: ${(e as Error).message}`);
+			}
+		}
 		Object.assign(book, changes, { dateModified: Date.now() });
 		await this.saveSettings();
 		this.refreshViews();
@@ -294,7 +349,8 @@ export default class EbookLibraryPlugin extends Plugin {
 		const readers = this.settings.readers;
 		const readerId = this.getActiveReaderId() ?? (readers.length === 1 ? readers[0].id : null);
 		const changes: Partial<Book> = { lastOpened: Date.now() };
-		if (readerId && this.getReaderState(book, readerId).status === "unread") {
+		// Opening a note doesn't mean starting the book, so notes are left alone.
+		if (book.source !== "note" && readerId && this.getReaderState(book, readerId).status === "unread") {
 			changes.readerStates = {
 				...book.readerStates,
 				[readerId]: { status: "reading", progress: 0, finishedAt: null },

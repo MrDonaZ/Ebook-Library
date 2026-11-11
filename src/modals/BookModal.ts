@@ -48,7 +48,7 @@ export class BookModal extends Modal {
 	private titleInputEl!: HTMLInputElement;
 	private coverPreviewEl!: HTMLElement;
 	private tagsChipsEl!: HTMLElement;
-	private tagsInputEl!: HTMLInputElement;
+	private tagsInputEl?: HTMLInputElement;
 	private starsEl!: HTMLElement;
 
 	constructor(
@@ -100,6 +100,11 @@ export class BookModal extends Modal {
 		const frame = section.createDiv({ cls: "el-modal-cover-frame" });
 		this.coverPreviewEl = frame.createDiv({ cls: "el-modal-cover-preview" });
 		this.renderCoverPreview();
+
+		if (this.existing?.coverFromNote) {
+			section.createDiv({ cls: "el-modal-cover-hint", text: "Cover from the note's properties" });
+			return;
+		}
 
 		const changeBtn = frame.createEl("button", {
 			cls: "el-modal-cover-edit-btn",
@@ -207,22 +212,48 @@ export class BookModal extends Modal {
 		const form = parent.createDiv({ cls: "el-modal-form" });
 
 		this.addSectionTitle(form, "Book details");
-		this.buildFileField(form);
-		this.buildTextField(form, "Title", this.title, "Book title", (v) => {
-			this.title = v;
-			this.renderCoverPreview();
-		}, (inputEl) => (this.titleInputEl = inputEl));
-		this.buildTextField(form, "Author", this.author, "Author name", (v) => (this.author = v));
-		this.buildCategoryField(form);
+		if (this.isNote) {
+			// Title, author, tags and reading dates come from the note itself.
+			const info = form.createDiv({ cls: "el-note-info" });
+			setIcon(info.createSpan({ cls: "el-note-info-icon" }), "file-text");
+			info.createSpan({
+				text: "This book is a note: title, author and tags come from its properties, and reading status is saved back into them.",
+			});
+			this.buildReadOnlyField(form, "Note", this.filePath);
+			this.buildReadOnlyField(form, "Title", this.title);
+			if (this.author) this.buildReadOnlyField(form, "Author", this.author);
+			if (this.tags.length) this.buildReadOnlyField(form, "Tags", this.tags.join(", "));
+			this.buildCategoryField(form);
+			this.addSectionTitle(form, "Organize");
+			this.buildDescriptionField(form);
+		} else {
+			this.buildFileField(form);
+			this.buildTextField(form, "Title", this.title, "Book title", (v) => {
+				this.title = v;
+				this.renderCoverPreview();
+			}, (inputEl) => (this.titleInputEl = inputEl));
+			this.buildTextField(form, "Author", this.author, "Author name", (v) => (this.author = v));
+			this.buildCategoryField(form);
 
-		this.addSectionTitle(form, "Organize");
-		this.buildTagsField(form);
-		this.buildDescriptionField(form);
+			this.addSectionTitle(form, "Organize");
+			this.buildTagsField(form);
+			this.buildDescriptionField(form);
+		}
 
 		this.addSectionTitle(form, "Progress & rating");
 		this.buildReaderStatesField(form);
 		this.buildTotalPagesField(form);
 		this.buildRatingField(form);
+	}
+
+	private get isNote(): boolean {
+		return this.existing?.source === "note";
+	}
+
+	private buildReadOnlyField(form: HTMLElement, label: string, value: string) {
+		const row = form.createDiv({ cls: "el-field el-field-readonly" });
+		row.createDiv({ cls: "el-field-label", text: label });
+		row.createDiv({ cls: "el-field-value", text: value });
 	}
 
 	private addSectionTitle(parent: HTMLElement, text: string) {
@@ -302,24 +333,25 @@ export class BookModal extends Modal {
 		const control = row.createDiv({ cls: "el-field-control" });
 		const field = control.createDiv({ cls: "el-tags-field" });
 		this.tagsChipsEl = field.createDiv({ cls: "el-tags-chips" });
-		this.tagsInputEl = field.createEl("input", {
+		const tagsInput = field.createEl("input", {
 			cls: "el-tags-input",
 			type: "text",
 			placeholder: "Add a tag...",
 		});
-		this.tagsInputEl.addEventListener("keydown", (evt) => {
+		this.tagsInputEl = tagsInput;
+		tagsInput.addEventListener("keydown", (evt) => {
 			if (evt.key === "Enter" || evt.key === ",") {
 				evt.preventDefault();
-				this.addTag(this.tagsInputEl.value);
-				this.tagsInputEl.value = "";
-			} else if (evt.key === "Backspace" && this.tagsInputEl.value === "" && this.tags.length > 0) {
+				this.addTag(tagsInput.value);
+				tagsInput.value = "";
+			} else if (evt.key === "Backspace" && tagsInput.value === "" && this.tags.length > 0) {
 				this.tags.pop();
 				this.renderTagChips();
 			}
 		});
-		this.tagsInputEl.addEventListener("blur", () => {
-			this.addTag(this.tagsInputEl.value);
-			this.tagsInputEl.value = "";
+		tagsInput.addEventListener("blur", () => {
+			this.addTag(tagsInput.value);
+			tagsInput.value = "";
 		});
 		this.renderTagChips();
 
@@ -484,7 +516,8 @@ export class BookModal extends Modal {
 	private buildButtons(parent: HTMLElement) {
 		const buttons = parent.createDiv({ cls: "el-modal-buttons" });
 
-		if (this.existing) {
+		// Note-backed books leave the library by moving the note out of the folder.
+		if (this.existing && !this.isNote) {
 			const deleteBtn = buttons.createEl("button", { cls: "el-btn-danger" });
 			const deleteBtnLabel = deleteBtn.createSpan({ cls: "el-btn-icon-label" });
 			setIcon(deleteBtnLabel.createSpan(), "trash-2");
@@ -517,7 +550,7 @@ export class BookModal extends Modal {
 	}
 
 	private async handleSave(saveBtn: HTMLButtonElement) {
-		this.addTag(this.tagsInputEl.value);
+		if (this.tagsInputEl) this.addTag(this.tagsInputEl.value);
 
 		if (!this.filePath.trim()) {
 			new Notice("Please choose a book file");
@@ -530,6 +563,8 @@ export class BookModal extends Modal {
 
 		saveBtn.disabled = true;
 		const data: NewBookInput = {
+			source: this.existing?.source ?? "manual",
+			coverFromNote: this.existing?.coverFromNote,
 			filePath: this.filePath.trim(),
 			title: this.title.trim(),
 			author: this.author.trim(),

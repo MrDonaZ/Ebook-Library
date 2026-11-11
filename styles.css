@@ -1449,3 +1449,32 @@
 	width: auto;
 	max-width: 160px;
 }
+
+/* Note-backed books in the edit dialog */
+.el-note-info {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 8px 10px;
+	margin-bottom: 12px;
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: 0.85em;
+}
+
+.el-note-info-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+}
+
+.el-note-info-icon svg {
+	width: 15px;
+	height: 15px;
+}
+
+.el-field-readonly .el-field-value {
+	font-size: 0.9em;
+	color: var(--text-normal);
+	word-break: break-word;
+}
