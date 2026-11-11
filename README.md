@@ -54,9 +54,9 @@ Use the library toolbar to:
 
 - Search across your entire collection
 - Filter by category or tag
-- Choose whose statuses to show (everyone or a single reader)
+- Choose whose statuses to show with the "Reading as" switch (everyone or a single reader, remembered on each device)
 - Switch between All, Unread, Reading, and Completed
-- Sort by title, author, date added, recently opened, reading progress, who finished the book, or finish date
+- Sort by title, author, date added, recently opened, reading progress, or finish date
 - Choose a compact, comfortable, or spacious card size
 
 <img width="1727" height="971" alt="image" src="https://github.com/user-attachments/assets/0d1e2a50-2f8d-4d03-b0eb-b3ecb001dc9d" />

@@ -49,6 +49,17 @@ export function formatRelativeDate(timestamp: number | null): string {
 	});
 }
 
+/** Clearly distinct avatar colors, assigned by the reader's position in the list. */
+const READER_COLORS = ["#2563eb", "#db2777", "#0d9488", "#d97706", "#7c3aed", "#65a30d", "#dc2626", "#0891b2"];
+
+export function readerColor(index: number): string {
+	return READER_COLORS[((index % READER_COLORS.length) + READER_COLORS.length) % READER_COLORS.length];
+}
+
+export function readerInitial(name: string): string {
+	return (name.trim()[0] ?? "?").toUpperCase();
+}
+
 export function formatDate(timestamp: number): string {
 	return new Date(timestamp).toLocaleDateString(undefined, {
 		year: "numeric",

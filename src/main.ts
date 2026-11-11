@@ -11,10 +11,15 @@ import {
 import { LibraryView, VIEW_TYPE_LIBRARY } from "./view/LibraryView";
 import { EbookLibrarySettingTab } from "./settings/SettingsTab";
 import { BookModal } from "./modals/BookModal";
-import { generateId, nextReaderState } from "./utils";
+import { generateId, nextReaderState, readerColor } from "./utils";
+
+/** Stored per device (not synced), so each person's phone remembers who is using it. */
+const ACTIVE_READER_KEY = "ebook-library-active-reader";
 
 export default class EbookLibraryPlugin extends Plugin {
 	settings!: EbookLibrarySettings;
+	/** Reader this device is viewing as; null = everyone. */
+	private activeReader: string | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -85,10 +90,17 @@ export default class EbookLibraryPlugin extends Plugin {
 		if (this.settings.readers.length === 0) {
 			this.settings.readers = DEFAULT_SETTINGS.readers.map((r) => ({ ...r }));
 		}
-		if (!this.settings.readers.some((r) => r.id === this.settings.activeReader)) {
-			this.settings.activeReader = "all";
-		}
 		for (const book of this.settings.books) this.migrateBook(book);
+
+		// Older builds kept these in the synced data; the view reader now lives on the device.
+		const legacy = this.settings as EbookLibrarySettings & { activeReader?: string };
+		const legacyActive = legacy.activeReader;
+		delete legacy.activeReader;
+		if ((this.settings.sortKey as string) === "finishedBy") this.settings.sortKey = "dateFinished";
+
+		const stored = this.app.loadLocalStorage(ACTIVE_READER_KEY) as string | null;
+		const candidate = stored ?? legacyActive ?? null;
+		this.activeReader = this.settings.readers.some((r) => r.id === candidate) ? candidate : null;
 	}
 
 	/**
@@ -202,8 +214,18 @@ export default class EbookLibraryPlugin extends Plugin {
 
 	/** The reader whose states the library shows, or null for everyone. */
 	getActiveReaderId(): string | null {
-		const id = this.settings.activeReader;
-		return this.settings.readers.some((r) => r.id === id) ? id : null;
+		const id = this.activeReader;
+		return id && this.settings.readers.some((r) => r.id === id) ? id : null;
+	}
+
+	getReaderColor(id: string): string {
+		return readerColor(this.settings.readers.findIndex((r) => r.id === id));
+	}
+
+	setActiveReader(id: string | null) {
+		this.activeReader = id;
+		this.app.saveLocalStorage(ACTIVE_READER_KEY, id);
+		this.refreshViews();
 	}
 
 	getReaderState(book: Book, readerId: string): ReaderState {
@@ -254,7 +276,7 @@ export default class EbookLibraryPlugin extends Plugin {
 			return;
 		}
 		this.settings.readers = this.settings.readers.filter((r) => r.id !== id);
-		if (this.settings.activeReader === id) this.settings.activeReader = "all";
+		if (this.activeReader === id) this.setActiveReader(null);
 		for (const book of this.settings.books) {
 			delete book.readerStates[id];
 		}

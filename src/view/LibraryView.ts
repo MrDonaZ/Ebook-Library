@@ -13,7 +13,13 @@ import {
 } from "../types";
 import { BookModal } from "../modals/BookModal";
 import { ConfirmModal } from "../modals/ConfirmModal";
-import { debounce, formatDate, formatRelativeDate, placeholderGradient } from "../utils";
+import {
+	debounce,
+	formatDate,
+	formatRelativeDate,
+	placeholderGradient,
+	readerInitial,
+} from "../utils";
 
 export const VIEW_TYPE_LIBRARY = "ebook-library-view";
 
@@ -23,7 +29,6 @@ const SORT_OPTIONS: [SortKey, string][] = [
 	["author", "Author"],
 	["lastOpened", "Recently opened"],
 	["progress", "Progress"],
-	["finishedBy", "Finished by"],
 	["dateFinished", "Date finished"],
 ];
 
@@ -53,7 +58,7 @@ export class LibraryView extends ItemView {
 	private searchInputEl!: HTMLInputElement;
 	private categorySelectEl!: HTMLSelectElement;
 	private tagSelectEl!: HTMLSelectElement;
-	private readerSelectEl!: HTMLSelectElement;
+	private readerSwitchEl!: HTMLElement;
 	private sortSelectEl!: HTMLSelectElement;
 	private sortDirBtn!: HTMLElement;
 	private densityGroupEl!: HTMLElement;
@@ -148,16 +153,6 @@ export class LibraryView extends ItemView {
 			this.render();
 		});
 
-		this.readerSelectEl = filters.createEl("select", {
-			cls: "el-select el-reader-select",
-			attr: { "aria-label": "Show reading status of", title: "Show reading status of" },
-		});
-		this.readerSelectEl.addEventListener("change", () => {
-			this.plugin.settings.activeReader = this.readerSelectEl.value;
-			void this.plugin.saveSettings();
-			this.render();
-		});
-
 		this.sortSelectEl = filters.createEl("select", { cls: "el-select" });
 		for (const [key, label] of SORT_OPTIONS) {
 			this.sortSelectEl.createEl("option", { value: key, text: label });
@@ -199,6 +194,12 @@ export class LibraryView extends ItemView {
 			});
 		}
 
+		// Whose reading status the library shows (remembered per device)
+		this.readerSwitchEl = root.createDiv({
+			cls: "el-reader-switch",
+			attr: { role: "group", "aria-label": "Show reading status of" },
+		});
+
 		// Status tabs
 		this.tabsEl = root.createDiv({ cls: "el-tabs" });
 		for (const tab of STATUS_TABS) {
@@ -228,7 +229,7 @@ export class LibraryView extends ItemView {
 	render() {
 		this.headerTitleEl.setText(this.plugin.settings.libraryTitle);
 		this.populateTagOptions();
-		this.populateReaderOptions();
+		this.renderReaderSwitch();
 		this.updateActiveTab();
 		this.updateSortDirButton();
 		this.updateDensityToggle();
@@ -303,10 +304,17 @@ export class LibraryView extends ItemView {
 		this.renderCover(cover, featured);
 
 		const info = card.createDiv({ cls: "el-continue-info" });
-		const readingPill = active
-			? "READING"
-			: `READING · ${this.readersWithStatus(featured, "reading").join(", ").toUpperCase()}`;
-		info.createDiv({ cls: "el-badge-reading-pill", text: readingPill });
+		const pillRow = info.createDiv({ cls: "el-continue-pill-row" });
+		pillRow.createDiv({ cls: "el-badge-reading-pill", text: "READING" });
+		if (!active) {
+			// Everyone: show who is reading it.
+			for (const reader of this.plugin.settings.readers) {
+				if (this.plugin.getReaderState(featured, reader.id).status !== "reading") continue;
+				const avatar = this.createAvatar(pillRow, reader.id, reader.name);
+				avatar.setAttribute("aria-label", `${reader.name} is reading`);
+				avatar.setAttribute("title", `${reader.name} is reading`);
+			}
+		}
 		info.createDiv({ cls: "el-continue-book-title", text: featured.title });
 		if (featured.author) {
 			info.createDiv({ cls: "el-continue-book-author", text: featured.author });
@@ -340,21 +348,49 @@ export class LibraryView extends ItemView {
 		this.tagSelectEl.value = this.tagFilter;
 	}
 
-	private populateReaderOptions() {
-		this.readerSelectEl.empty();
-		this.readerSelectEl.createEl("option", { value: "all", text: "Everyone" });
-		for (const reader of this.plugin.settings.readers) {
-			this.readerSelectEl.createEl("option", { value: reader.id, text: reader.name });
-		}
-		this.readerSelectEl.value = this.plugin.getActiveReaderId() ?? "all";
-		this.readerSelectEl.toggle(this.plugin.settings.readers.length > 1);
+	private renderReaderSwitch() {
+		const readers = this.plugin.settings.readers;
+		this.readerSwitchEl.empty();
+		// With a single reader there is nothing to switch.
+		this.readerSwitchEl.toggle(readers.length > 1);
+		if (readers.length <= 1) return;
+
+		const active = this.plugin.getActiveReaderId();
+		this.readerSwitchEl.createSpan({ cls: "el-reader-switch-label", text: "Reading as" });
+		const addChip = (id: string | null, label: string) => {
+			const chip = this.readerSwitchEl.createEl("button", { cls: "el-reader-chip" });
+			chip.toggleClass("is-active", id === active);
+			chip.setAttribute("aria-pressed", String(id === active));
+			if (id) {
+				this.createAvatar(chip, id, label);
+			} else {
+				setIcon(chip.createSpan({ cls: "el-reader-chip-icon" }), "users");
+			}
+			chip.createSpan({ text: label });
+			chip.addEventListener("click", () => {
+				if (id !== active) this.plugin.setActiveReader(id);
+			});
+		};
+		addChip(null, "Everyone");
+		for (const reader of readers) addChip(reader.id, reader.name);
 	}
 
-	/** Names of the readers whose state for this book is `status`. */
-	private readersWithStatus(book: Book, status: ReadingStatus): string[] {
-		return this.plugin.settings.readers
-			.filter((r) => this.plugin.getReaderState(book, r.id).status === status)
-			.map((r) => r.name);
+	/** Small round avatar with the reader's initial and, optionally, a status marker. */
+	private createAvatar(parent: HTMLElement, readerId: string, name: string, status?: ReadingStatus): HTMLElement {
+		const avatar = parent.createSpan({ cls: "el-avatar", text: readerInitial(name) });
+		avatar.setCssStyles({ background: this.plugin.getReaderColor(readerId) });
+		if (status && status !== "unread") {
+			const mark = avatar.createSpan({ cls: `el-avatar-status is-${status}` });
+			setIcon(mark, status === "completed" ? "check" : "book-open");
+		}
+		return avatar;
+	}
+
+	/** Tooltip text like "Anna · Completed 9 Mar 2026". */
+	private readerStatusText(book: Book, readerId: string, name: string): string {
+		const state = this.plugin.getReaderState(book, readerId);
+		const date = state.status === "completed" && state.finishedAt ? ` ${formatDate(state.finishedAt)}` : "";
+		return `${name} · ${STATUS_META[state.status].label}${date}`;
 	}
 
 	private updateActiveTab() {
@@ -406,7 +442,10 @@ export class LibraryView extends ItemView {
 			// Everyone: one chip per reader with how many books they finished.
 			for (const reader of this.plugin.settings.readers) {
 				const done = books.filter((b) => this.plugin.bookHasStatus(b, "completed", reader.id)).length;
-				this.addStatChip("check-circle", String(done), `${reader.name} completed`);
+				const chip = this.statsEl.createDiv({ cls: "el-stat-chip" });
+				this.createAvatar(chip, reader.id, reader.name);
+				chip.createEl("span", { cls: "el-stat-chip-value", text: String(done) });
+				chip.createSpan({ cls: "el-stat-chip-label", text: `completed by ${reader.name}` });
 			}
 			return;
 		}
@@ -488,10 +527,6 @@ export class LibraryView extends ItemView {
 
 		const dir = this.plugin.settings.sortDirection === "asc" ? 1 : -1;
 		const key = this.plugin.settings.sortKey;
-		const finishedLabel = (book: Book) =>
-			this.readersWithStatus(book, "completed")
-				.sort((x, y) => x.localeCompare(y))
-				.join(", ");
 		// With a reader selected, use that reader's date/progress; otherwise the latest/highest one.
 		const finishedDate = (book: Book) => this.plugin.getFinishedAt(book, active);
 		books.sort((a, b) => {
@@ -502,13 +537,6 @@ export class LibraryView extends ItemView {
 					// Books without a finish date always go last.
 					if (da === null || db === null) return da === db ? 0 : da !== null ? -1 : 1;
 					return (da - db) * dir;
-				}
-				case "finishedBy": {
-					const la = finishedLabel(a);
-					const lb = finishedLabel(b);
-					// Books finished by nobody always go last.
-					if (!la || !lb) return la === lb ? 0 : la ? -1 : 1;
-					return la.localeCompare(lb) * dir || a.title.localeCompare(b.title);
 				}
 				case "title":
 					return a.title.localeCompare(b.title) * dir;
@@ -576,17 +604,7 @@ export class LibraryView extends ItemView {
 			setIcon(badge, "alert-triangle");
 			badge.setAttribute("aria-label", "File not found in vault");
 		} else {
-			// Selected reader: their status. Everyone: DONE once all readers finished, READING if anyone is.
-			const active = this.plugin.getActiveReaderId();
-			const allDone = this.plugin.settings.readers.every(
-				(r) => this.plugin.getReaderState(book, r.id).status === "completed"
-			);
-			const done = active ? this.plugin.bookHasStatus(book, "completed", active) : allDone;
-			if (done) {
-				cover.createDiv({ cls: "el-badge-completed-top", text: "DONE" });
-			} else if (this.plugin.bookHasStatus(book, "reading", active)) {
-				cover.createDiv({ cls: "el-badge-reading-top", text: "READING" });
-			}
+			this.renderCoverStatus(cover, book);
 		}
 
 		setIcon(cover.createDiv({ cls: "el-card-hover-open", attr: { "aria-hidden": "true" } }), "book-open");
@@ -605,24 +623,12 @@ export class LibraryView extends ItemView {
 		const tagsRow = info.createDiv({ cls: "el-card-tags" });
 		const categoryPill = tagsRow.createSpan({ cls: "el-tag-pill el-tag-pill-category" });
 		categoryPill.appendText(CATEGORY_META[book.category]?.label ?? book.category);
-		for (const reader of this.plugin.settings.readers) {
-			const state = this.plugin.getReaderState(book, reader.id);
-			if (state.status === "unread") continue;
-			const completed = state.status === "completed";
-			const tooltip = completed
-				? `${reader.name}: completed${state.finishedAt ? ` on ${formatDate(state.finishedAt)}` : ""}`
-				: `${reader.name}: reading`;
-			const pill = tagsRow.createSpan({
-				cls: `el-tag-pill el-tag-pill-reader ${completed ? "is-completed" : "is-reading"}`,
-				attr: { "aria-label": tooltip, title: tooltip },
-			});
-			setIcon(pill.createSpan({ cls: "el-tag-pill-reader-icon" }), completed ? "check" : "book-open");
-			pill.appendText(reader.name);
-			if (completed && state.finishedAt) {
-				pill.createSpan({ cls: "el-tag-pill-reader-date", text: formatDate(state.finishedAt) });
-			}
-		}
-		if (book.lastOpened) {
+		// One date only: when the viewed reader finished it, otherwise when it was last opened.
+		const viewed = this.getViewedReaderId();
+		const viewedState = viewed ? this.plugin.getReaderState(book, viewed) : null;
+		if (viewedState?.status === "completed" && viewedState.finishedAt) {
+			tagsRow.createSpan({ cls: "el-card-last-opened", text: `Finished ${formatDate(viewedState.finishedAt)}` });
+		} else if (book.lastOpened) {
 			tagsRow.createSpan({ cls: "el-card-last-opened", text: formatRelativeDate(book.lastOpened) });
 		}
 
@@ -641,6 +647,47 @@ export class LibraryView extends ItemView {
 		});
 
 		return card;
+	}
+
+	/** The reader whose status is shown as "the" status: the selected one, or the only one. */
+	private getViewedReaderId(): string | null {
+		const readers = this.plugin.settings.readers;
+		return this.plugin.getActiveReaderId() ?? (readers.length === 1 ? readers[0].id : null);
+	}
+
+	/**
+	 * Status on the cover, without repeating information:
+	 * - one reader in view: a READING/DONE badge for them, plus small avatars for the other readers
+	 *   who have started or finished the book;
+	 * - everyone: a DONE badge once all readers finished it, otherwise avatars of who is on it.
+	 */
+	private renderCoverStatus(cover: HTMLElement, book: Book) {
+		const readers = this.plugin.settings.readers;
+		const viewed = this.getViewedReaderId();
+		const tooltipAll = readers.map((r) => this.readerStatusText(book, r.id, r.name)).join("\n");
+
+		let badge: HTMLElement | null = null;
+		let others = readers;
+		if (viewed) {
+			const status = this.plugin.getReaderState(book, viewed).status;
+			if (status === "completed") badge = cover.createDiv({ cls: "el-badge-completed-top", text: "DONE" });
+			if (status === "reading") badge = cover.createDiv({ cls: "el-badge-reading-top", text: "READING" });
+			others = readers.filter((r) => r.id !== viewed);
+		} else if (readers.every((r) => this.plugin.getReaderState(book, r.id).status === "completed")) {
+			badge = cover.createDiv({ cls: "el-badge-completed-top", text: "DONE" });
+			others = [];
+		}
+		if (badge) badge.setAttribute("title", tooltipAll);
+
+		const started = others.filter((r) => this.plugin.getReaderState(book, r.id).status !== "unread");
+		if (started.length === 0) return;
+		const row = cover.createDiv({ cls: "el-cover-readers" });
+		for (const reader of started) {
+			const text = this.readerStatusText(book, reader.id, reader.name);
+			const avatar = this.createAvatar(row, reader.id, reader.name, this.plugin.getReaderState(book, reader.id).status);
+			avatar.setAttribute("aria-label", text);
+			avatar.setAttribute("title", text);
+		}
 	}
 
 	private renderCover(container: HTMLElement, book: Book) {
@@ -693,26 +740,27 @@ export class LibraryView extends ItemView {
 
 		menu.addSeparator();
 
-		// Status actions: for the selected reader, or for each reader when viewing everyone.
-		const active = this.plugin.getActiveReaderId();
-		const readers = this.plugin.settings.readers.filter((r) => !active || r.id === active);
-		const statuses: ReadingStatus[] = ["unread", "reading", "completed"];
-		readers.forEach((reader, i) => {
-			if (i > 0) menu.addSeparator();
-			const state = this.plugin.getReaderState(book, reader.id);
-			for (const status of statuses) {
-				const action = `Mark as ${STATUS_META[status].label.toLowerCase()}`;
+		const viewed = this.getViewedReaderId();
+		if (viewed) {
+			// One reader in view: the classic three actions, for them.
+			this.addStatusItems(menu, book, viewed);
+		} else {
+			// Everyone: one compact row per reader showing their status; tapping it lets you change it.
+			for (const reader of this.plugin.settings.readers) {
+				const status = this.plugin.getReaderState(book, reader.id).status;
 				menu.addItem((item) =>
 					item
-						.setTitle(readers.length > 1 ? `${reader.name}: ${action.toLowerCase()}` : action)
+						.setTitle(this.readerStatusText(book, reader.id, reader.name))
 						.setIcon(STATUS_META[status].icon)
-						.setChecked(state.status === status)
 						.onClick(() => {
-							void this.plugin.setReaderStatus(book, reader.id, status);
+							const sub = new Menu();
+							this.addStatusItems(sub, book, reader.id);
+							// Let the first menu close before opening the next one.
+							window.setTimeout(() => sub.showAtPosition({ x: evt.clientX, y: evt.clientY }), 0);
 						})
 				);
 			}
-		});
+		}
 
 		menu.addSeparator();
 		menu.addItem((item) =>
@@ -730,6 +778,22 @@ export class LibraryView extends ItemView {
 		);
 
 		menu.showAtMouseEvent(evt);
+	}
+
+	private addStatusItems(menu: Menu, book: Book, readerId: string) {
+		const state = this.plugin.getReaderState(book, readerId);
+		const statuses: ReadingStatus[] = ["unread", "reading", "completed"];
+		for (const status of statuses) {
+			menu.addItem((item) =>
+				item
+					.setTitle(`Mark as ${STATUS_META[status].label.toLowerCase()}`)
+					.setIcon(STATUS_META[status].icon)
+					.setChecked(state.status === status)
+					.onClick(() => {
+						void this.plugin.setReaderStatus(book, readerId, status);
+					})
+			);
+		}
 	}
 
 	// ---------- Modals ----------

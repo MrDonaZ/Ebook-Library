@@ -9,7 +9,6 @@ import {
 	NewBookInput,
 	ReaderState,
 	ReadingStatus,
-	STATUS_META,
 } from "../types";
 import {
 	clamp,
@@ -17,6 +16,7 @@ import {
 	getBasename,
 	nextReaderState,
 	placeholderGradient,
+	readerInitial,
 	toDateInputValue,
 } from "../utils";
 import { ConfirmModal } from "./ConfirmModal";
@@ -373,28 +373,42 @@ export class BookModal extends Modal {
 
 	private buildReaderStatesField(form: HTMLElement) {
 		const readers = this.plugin.settings.readers;
+		const multi = readers.length > 1;
 		const row = form.createDiv({ cls: "el-field" });
 		row.createDiv({ cls: "el-field-label", text: "Reading status" });
-		row.createDiv({
-			cls: "el-field-desc",
-			text: "Each reader's status, and when they finished. Readers are configured in settings.",
-		});
+		if (multi) {
+			row.createDiv({ cls: "el-field-desc", text: "Each reader has their own status." });
+		}
 		const control = row.createDiv({ cls: "el-field-control el-reader-states" });
-		const statuses: ReadingStatus[] = ["unread", "reading", "completed"];
+		const statuses: { value: ReadingStatus; label: string }[] = [
+			{ value: "unread", label: "Unread" },
+			{ value: "reading", label: "Reading" },
+			{ value: "completed", label: "Done" },
+		];
 
 		for (const reader of readers) {
 			const readerRow = control.createDiv({ cls: "el-reader-row" });
-			readerRow.createSpan({ cls: "el-reader-name", text: reader.name });
-
-			const select = readerRow.createEl("select", {
-				cls: "el-select",
-				attr: { "aria-label": `Reading status of ${reader.name}` },
-			});
-			for (const status of statuses) {
-				select.createEl("option", { value: status, text: STATUS_META[status].label });
+			if (multi) {
+				const who = readerRow.createDiv({ cls: "el-reader-name" });
+				const avatar = who.createSpan({ cls: "el-avatar", text: readerInitial(reader.name) });
+				avatar.setCssStyles({ background: this.plugin.getReaderColor(reader.id) });
+				who.createSpan({ text: reader.name });
 			}
 
-			const dateInput = readerRow.createEl("input", {
+			const segmented = readerRow.createDiv({
+				cls: "el-segmented",
+				attr: { role: "group", "aria-label": `Reading status of ${reader.name}` },
+			});
+			const buttons = statuses.map((s) => {
+				const btn = segmented.createEl("button", { cls: "el-segmented-btn", text: s.label });
+				btn.dataset.status = s.value;
+				return btn;
+			});
+
+			// Finish date appears only once the reader is done.
+			const dateWrap = readerRow.createDiv({ cls: "el-reader-date-wrap" });
+			dateWrap.createSpan({ cls: "el-reader-date-label", text: "Finished on" });
+			const dateInput = dateWrap.createEl("input", {
 				type: "date",
 				cls: "el-text-input el-reader-date",
 				attr: { "aria-label": `Date ${reader.name} finished this book` },
@@ -403,21 +417,25 @@ export class BookModal extends Modal {
 			const sync = () => {
 				const state = this.readerStates[reader.id];
 				const status = state?.status ?? "unread";
-				select.value = status;
-				dateInput.toggle(status === "completed");
+				for (const btn of buttons) {
+					const on = btn.dataset.status === status;
+					btn.toggleClass("is-active", on);
+					btn.setAttribute("aria-pressed", String(on));
+				}
+				dateWrap.toggle(status === "completed");
 				dateInput.value = state?.finishedAt ? toDateInputValue(state.finishedAt) : "";
 			};
 			sync();
 
-			select.addEventListener("change", () => {
-				const prev = this.readerStates[reader.id] ?? { status: "unread", progress: 0, finishedAt: null };
-				// Moving to "completed" defaults the finish date to today; the user can change it.
-				this.readerStates[reader.id] = nextReaderState(
-					prev,
-					select.value as ReadingStatus
-				);
-				sync();
-			});
+			for (const btn of buttons) {
+				btn.addEventListener("click", (evt) => {
+					evt.preventDefault();
+					const prev = this.readerStates[reader.id] ?? { status: "unread", progress: 0, finishedAt: null };
+					// Moving to "completed" defaults the finish date to today; the user can change it.
+					this.readerStates[reader.id] = nextReaderState(prev, btn.dataset.status as ReadingStatus);
+					sync();
+				});
+			}
 			dateInput.addEventListener("change", () => {
 				const state = this.readerStates[reader.id];
 				if (state) state.finishedAt = fromDateInputValue(dateInput.value);

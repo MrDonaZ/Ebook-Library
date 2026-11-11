@@ -51,12 +51,10 @@ export interface Reader {
 
 export type NewBookInput = Omit<Book, "id" | "dateAdded" | "dateModified">;
 
-export type SortKey = "title" | "author" | "dateAdded" | "lastOpened" | "progress" | "finishedBy" | "dateFinished";
+export type SortKey = "title" | "author" | "dateAdded" | "lastOpened" | "progress" | "dateFinished";
 export type SortDirection = "asc" | "desc";
 export type StatusFilter = "all" | ReadingStatus;
 export type CategoryFilter = "all" | BookCategory;
-/** "all" (everyone) or a reader id. */
-export type ActiveReader = string;
 export type CardSize = "small" | "medium" | "large";
 
 export interface EbookLibrarySettings {
@@ -67,8 +65,6 @@ export interface EbookLibrarySettings {
 	sortDirection: SortDirection;
 	openOnStartup: boolean;
 	readers: Reader[];
-	/** Whose reading states the library shows: "all" or a reader id. */
-	activeReader: ActiveReader;
 }
 
 export const DEFAULT_SETTINGS: EbookLibrarySettings = {
@@ -82,7 +78,6 @@ export const DEFAULT_SETTINGS: EbookLibrarySettings = {
 		{ id: "reader-1", name: "Reader 1" },
 		{ id: "reader-2", name: "Reader 2" },
 	],
-	activeReader: "all",
 };
 
 export interface CategoryMeta {

@@ -738,31 +738,6 @@
 	border: 1px solid var(--el-surface-border);
 }
 
-.el-tag-pill-reader {
-	gap: 3px;
-}
-
-.el-tag-pill-reader.is-completed {
-	color: var(--color-green, var(--el-text-muted));
-	background: rgba(var(--color-green-rgb, 0, 160, 80), 0.1);
-	border-color: rgba(var(--color-green-rgb, 0, 160, 80), 0.3);
-}
-
-.el-tag-pill-reader.is-reading {
-	color: var(--color-blue, var(--el-text-muted));
-	background: rgba(var(--color-blue-rgb, 0, 120, 220), 0.1);
-	border-color: rgba(var(--color-blue-rgb, 0, 120, 220), 0.3);
-}
-
-.el-tag-pill-reader-icon {
-	display: inline-flex;
-}
-
-.el-tag-pill-reader-icon svg {
-	width: 11px;
-	height: 11px;
-}
-
 .el-cover-placeholder {
 	width: 100%;
 	height: 100%;
@@ -988,47 +963,6 @@
 .el-field-control {
 	width: 100%;
 }
-.el-reader-states {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
-.el-reader-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	flex-wrap: wrap;
-	gap: 6px 12px;
-}
-
-.el-text-input.el-reader-date {
-	padding: 6px 8px;
-	width: auto;
-	max-width: 170px;
-}
-
-
-.el-tag-pill-reader-date {
-	font-weight: 400;
-	opacity: 0.8;
-	margin-left: 2px;
-}
-
-.el-tag-pill-reader-date::before {
-	content: "· ";
-}
-
-.el-reader-name {
-	flex: 1 1 80px;
-	font-weight: 600;
-	font-size: 0.9em;
-}
-
-.el-reader-states .el-reader-row .el-select {
-	width: auto;
-}
-
 .el-field-control-row {
 	display: flex;
 	align-items: center;
@@ -1316,4 +1250,189 @@
 }
 .ebook-library-view::-webkit-scrollbar-thumb:hover {
 	background: color-mix(in srgb, var(--interactive-accent) 65%, var(--background-modifier-border));
+}
+
+/* ---------- Readers ---------- */
+
+.el-avatar {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	color: #ffffff;
+	font-size: 0.68rem;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.el-avatar-status {
+	position: absolute;
+	right: -4px;
+	bottom: -4px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 13px;
+	height: 13px;
+	border-radius: 50%;
+	border: 1.5px solid var(--el-card-bg);
+}
+
+.el-avatar-status svg {
+	width: 8px;
+	height: 8px;
+	stroke-width: 3;
+}
+
+.el-avatar-status.is-completed {
+	background: #16a34a;
+	color: #ffffff;
+}
+
+.el-avatar-status.is-reading {
+	background: var(--el-badge-reading-bg);
+	color: var(--el-badge-reading-text);
+}
+
+/* "Reading as" switch */
+.el-reader-switch {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+.el-reader-switch-label {
+	font-size: 0.78em;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--el-text-faint);
+	margin-right: 4px;
+}
+
+.el-reader-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 12px 4px 5px;
+	border-radius: 999px;
+	border: 1px solid var(--el-pill-border);
+	background: transparent;
+	color: var(--el-text-muted);
+	font-size: 0.85em;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.el-reader-chip.is-active {
+	background: var(--el-surface);
+	border-color: var(--el-text-muted);
+	color: var(--el-text);
+	font-weight: 650;
+}
+
+.el-reader-chip-icon {
+	display: inline-flex;
+	padding-left: 4px;
+}
+
+.el-reader-chip-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Other readers' progress on a cover */
+.el-cover-readers {
+	position: absolute;
+	left: 8px;
+	bottom: 8px;
+	z-index: 2;
+	display: flex;
+	gap: 6px;
+}
+
+.el-cover-readers .el-avatar {
+	box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+.el-continue-pill-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.el-continue-pill-row .el-badge-reading-pill {
+	margin-bottom: 0;
+}
+
+/* Per-reader status in the edit dialog */
+.el-reader-states {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.el-reader-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+}
+
+.el-reader-name {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 90px;
+	font-weight: 600;
+	font-size: 0.9em;
+}
+
+.el-segmented {
+	display: inline-flex;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	overflow: hidden;
+}
+
+.el-segmented .el-segmented-btn {
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+	padding: 5px 12px;
+	font-size: 0.85em;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.el-segmented .el-segmented-btn + .el-segmented-btn {
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.el-segmented .el-segmented-btn.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+.el-reader-date-wrap {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.85em;
+	color: var(--text-muted);
+}
+
+.el-text-input.el-reader-date {
+	padding: 5px 8px;
+	width: auto;
+	max-width: 160px;
 }
