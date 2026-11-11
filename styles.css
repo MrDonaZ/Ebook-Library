@@ -1193,6 +1193,19 @@
 		width: 20px;
 		height: 20px;
 	}
+	.el-modal-layout {
+		flex-direction: column;
+		align-items: center;
+	}
+}
+
+/* Layout follows the width of the library pane, not the screen, so split
+   screen / multitasking windows get the compact layout too. */
+.ebook-library-view {
+	container-type: inline-size;
+}
+
+@container (max-width: 700px) {
 	.el-toolbar {
 		flex-direction: column;
 		align-items: stretch;
@@ -1201,6 +1214,10 @@
 	.el-filters {
 		width: 100%;
 		max-width: none;
+	}
+	.el-search {
+		/* In a column the flex-basis would become a height: keep the natural one. */
+		flex: 0 0 auto;
 	}
 	.el-toolbar-divider {
 		display: none;
@@ -1214,13 +1231,9 @@
 	.el-continue-card {
 		max-width: none;
 	}
-	.el-modal-layout {
-		flex-direction: column;
-		align-items: center;
-	}
 }
 
-@media (max-width: 440px) {
+@container (max-width: 440px) {
 	.el-continue-card {
 		flex-direction: column;
 		align-items: stretch;
