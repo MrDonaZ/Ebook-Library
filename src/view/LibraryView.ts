@@ -656,37 +656,38 @@ export class LibraryView extends ItemView {
 	}
 
 	/**
-	 * Status on the cover, without repeating information:
-	 * - one reader in view: a READING/DONE badge for them, plus small avatars for the other readers
-	 *   who have started or finished the book;
-	 * - everyone: a DONE badge once all readers finished it, otherwise avatars of who is on it.
+	 * Status on the cover. With several readers: a small avatar for every reader who
+	 * started or finished the book (the reader in view is highlighted); tap one to change
+	 * that reader's status. With a single reader: the classic READING / DONE badge.
 	 */
 	private renderCoverStatus(cover: HTMLElement, book: Book) {
 		const readers = this.plugin.settings.readers;
-		const viewed = this.getViewedReaderId();
-		const tooltipAll = readers.map((r) => this.readerStatusText(book, r.id, r.name)).join("\n");
-
-		let badge: HTMLElement | null = null;
-		let others = readers;
-		if (viewed) {
-			const status = this.plugin.getReaderState(book, viewed).status;
-			if (status === "completed") badge = cover.createDiv({ cls: "el-badge-completed-top", text: "DONE" });
-			if (status === "reading") badge = cover.createDiv({ cls: "el-badge-reading-top", text: "READING" });
-			others = readers.filter((r) => r.id !== viewed);
-		} else if (readers.every((r) => this.plugin.getReaderState(book, r.id).status === "completed")) {
-			badge = cover.createDiv({ cls: "el-badge-completed-top", text: "DONE" });
-			others = [];
+		if (readers.length === 1) {
+			const status = this.plugin.getReaderState(book, readers[0].id).status;
+			if (status === "completed") cover.createDiv({ cls: "el-badge-completed-top", text: "DONE" });
+			if (status === "reading") cover.createDiv({ cls: "el-badge-reading-top", text: "READING" });
+			return;
 		}
-		if (badge) badge.setAttribute("title", tooltipAll);
 
-		const started = others.filter((r) => this.plugin.getReaderState(book, r.id).status !== "unread");
+		const active = this.plugin.getActiveReaderId();
+		const started = readers.filter((r) => this.plugin.getReaderState(book, r.id).status !== "unread");
 		if (started.length === 0) return;
 		const row = cover.createDiv({ cls: "el-cover-readers" });
 		for (const reader of started) {
 			const text = this.readerStatusText(book, reader.id, reader.name);
 			const avatar = this.createAvatar(row, reader.id, reader.name, this.plugin.getReaderState(book, reader.id).status);
+			avatar.addClass("is-clickable");
+			if (reader.id === active) avatar.addClass("is-viewed");
 			avatar.setAttribute("aria-label", text);
 			avatar.setAttribute("title", text);
+			avatar.setAttribute("role", "button");
+			avatar.addEventListener("click", (evt) => {
+				evt.stopPropagation();
+				const menu = new Menu();
+				menu.addItem((item) => item.setTitle(text).setIsLabel(true));
+				this.addStatusItems(menu, book, reader.id);
+				menu.showAtMouseEvent(evt);
+			});
 		}
 	}
 
@@ -715,7 +716,8 @@ export class LibraryView extends ItemView {
 	}
 
 	private renderPlaceholderCover(container: HTMLElement, book: Book) {
-		container.empty();
+		// Only drop the broken image: badges and reader avatars stay in place.
+		container.querySelectorAll("img").forEach((img) => img.remove());
 		container.addClass("el-cover-placeholder");
 		container.setCssStyles({ background: placeholderGradient(book.title || book.filePath) });
 		const iconWrap = container.createDiv({ cls: "el-cover-placeholder-icon" });

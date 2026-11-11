@@ -1478,3 +1478,23 @@
 	color: var(--text-normal);
 	word-break: break-word;
 }
+
+/* Reader avatars on covers: a little larger, tappable, the viewed reader highlighted */
+.el-cover-readers .el-avatar {
+	width: 24px;
+	height: 24px;
+	font-size: 0.75rem;
+}
+
+.el-avatar.is-clickable {
+	cursor: pointer;
+	transition: transform 0.12s ease;
+}
+
+.el-avatar.is-clickable:hover {
+	transform: scale(1.12);
+}
+
+.el-cover-readers .el-avatar.is-viewed {
+	box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px rgba(0, 0, 0, 0.35);
+}

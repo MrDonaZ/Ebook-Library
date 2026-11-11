@@ -19,6 +19,7 @@ import {
 	readerInitial,
 	toDateInputValue,
 } from "../utils";
+import { NoteFieldChanges } from "../notes";
 import { ConfirmModal } from "./ConfirmModal";
 import { FileSuggestModal } from "./FileSuggestModal";
 import { PromptModal } from "./PromptModal";
@@ -42,6 +43,9 @@ export class BookModal extends Modal {
 	private readerStates: Record<string, ReaderState>;
 	private coverType: CoverType;
 	private cover: string;
+	/** Note-backed books: other note properties, as edited text. */
+	private noteProps: Record<string, string> = {};
+	private originalNoteProps: Record<string, string> = {};
 
 	// Element refs updated after initial render
 	private filePathInputEl!: HTMLInputElement;
@@ -100,11 +104,6 @@ export class BookModal extends Modal {
 		const frame = section.createDiv({ cls: "el-modal-cover-frame" });
 		this.coverPreviewEl = frame.createDiv({ cls: "el-modal-cover-preview" });
 		this.renderCoverPreview();
-
-		if (this.existing?.coverFromNote) {
-			section.createDiv({ cls: "el-modal-cover-hint", text: "Cover from the note's properties" });
-			return;
-		}
 
 		const changeBtn = frame.createEl("button", {
 			cls: "el-modal-cover-edit-btn",
@@ -213,19 +212,21 @@ export class BookModal extends Modal {
 
 		this.addSectionTitle(form, "Book details");
 		if (this.isNote) {
-			// Title, author, tags and reading dates come from the note itself.
+			// Everything edited here is saved into the note's properties.
 			const info = form.createDiv({ cls: "el-note-info" });
 			setIcon(info.createSpan({ cls: "el-note-info-icon" }), "file-text");
-			info.createSpan({
-				text: "This book is a note: title, author and tags come from its properties, and reading status is saved back into them.",
-			});
+			info.createSpan({ text: "Changes are saved into the note's properties." });
 			this.buildReadOnlyField(form, "Note", this.filePath);
-			this.buildReadOnlyField(form, "Title", this.title);
-			if (this.author) this.buildReadOnlyField(form, "Author", this.author);
-			if (this.tags.length) this.buildReadOnlyField(form, "Tags", this.tags.join(", "));
+			this.buildTextField(form, "Title", this.title, "Book title", (v) => {
+				this.title = v;
+				this.renderCoverPreview();
+			}, (inputEl) => (this.titleInputEl = inputEl));
+			this.buildTextField(form, "Author", this.author, "Author name (separate several with commas)", (v) => (this.author = v));
 			this.buildCategoryField(form);
 			this.addSectionTitle(form, "Organize");
+			this.buildTagsField(form);
 			this.buildDescriptionField(form);
+			this.buildNotePropertiesFields(form);
 		} else {
 			this.buildFileField(form);
 			this.buildTextField(form, "Title", this.title, "Book title", (v) => {
@@ -248,6 +249,18 @@ export class BookModal extends Modal {
 
 	private get isNote(): boolean {
 		return this.existing?.source === "note";
+	}
+
+	private buildNotePropertiesFields(form: HTMLElement) {
+		if (!this.existing) return;
+		const props = this.plugin.notes.getOtherProperties(this.existing);
+		if (props.length === 0) return;
+		this.addSectionTitle(form, "Note properties");
+		for (const { key, value } of props) {
+			this.noteProps[key] = value;
+			this.originalNoteProps[key] = value;
+			this.buildTextField(form, key, value, "", (v) => (this.noteProps[key] = v));
+		}
 	}
 
 	private buildReadOnlyField(form: HTMLElement, label: string, value: string) {
@@ -549,6 +562,27 @@ export class BookModal extends Modal {
 		});
 	}
 
+	/** Writes what changed into the note (statuses are written by updateBook). */
+	private async saveToNote(book: Book) {
+		const changes: NoteFieldChanges = {};
+		const titleChanged = this.title.trim() !== book.title;
+		const titleInProperty = this.plugin.notes.hasTitleProperty(book);
+		if (titleChanged && titleInProperty) changes.title = this.title.trim();
+		if (this.author.trim() !== book.author) changes.author = this.author.trim();
+		if (JSON.stringify(this.tags) !== JSON.stringify(book.tags)) changes.tags = this.tags;
+		if (this.coverType !== book.coverType || this.cover !== book.cover) {
+			changes.cover = { coverType: this.coverType, cover: this.cover };
+		}
+		const props: Record<string, string> = {};
+		for (const [key, value] of Object.entries(this.noteProps)) {
+			if (value !== this.originalNoteProps[key]) props[key] = value;
+		}
+		if (Object.keys(props).length) changes.props = props;
+
+		if (Object.keys(changes).length) await this.plugin.notes.writeFields(book, changes);
+		if (titleChanged && !titleInProperty) await this.plugin.notes.renameNote(book, this.title.trim());
+	}
+
 	private async handleSave(saveBtn: HTMLButtonElement) {
 		if (this.tagsInputEl) this.addTag(this.tagsInputEl.value);
 
@@ -562,6 +596,19 @@ export class BookModal extends Modal {
 		}
 
 		saveBtn.disabled = true;
+		try {
+			if (this.isNote && this.existing) await this.saveToNote(this.existing);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			new Notice(`Could not update the note: ${message}`);
+			saveBtn.disabled = false;
+			return;
+		}
+		// After a rename the entry already points at the new path.
+		if (this.isNote && this.existing) {
+			this.filePath = this.plugin.settings.books.find((b) => b.id === this.existing?.id)?.filePath ?? this.filePath;
+		}
+
 		const data: NewBookInput = {
 			source: this.existing?.source ?? "manual",
 			coverFromNote: this.existing?.coverFromNote,

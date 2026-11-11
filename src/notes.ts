@@ -1,4 +1,4 @@
-import { CachedMetadata, TAbstractFile, TFile, getAllTags } from "obsidian";
+import { CachedMetadata, TAbstractFile, TFile, getAllTags, normalizePath } from "obsidian";
 import type EbookLibraryPlugin from "./main";
 import { Book, CoverType, Reader, ReaderState, ReadingStatus } from "./types";
 import { fromDateInputValue, generateId, toDateInputValue } from "./utils";
@@ -46,6 +46,22 @@ function stripLinks(text: string): string {
 function parseDate(value: unknown): number | null {
 	const m = /^(\d{4}-\d{2}-\d{2})/.exec(toText(value).trim());
 	return m ? fromDateInputValue(m[1]) : null;
+}
+
+/** Changes to a note made from the edit dialog. Undefined fields are left alone. */
+export interface NoteFieldChanges {
+	/** Only used when the note has a "title" property; otherwise the note is renamed. */
+	title?: string;
+	author?: string;
+	tags?: string[];
+	cover?: { coverType: CoverType; cover: string };
+	/** Other properties, keyed by their exact name, as edited text. */
+	props?: Record<string, string>;
+}
+
+export interface EditableProperty {
+	key: string;
+	value: string;
 }
 
 /**
@@ -225,6 +241,107 @@ export class NoteSync {
 			}
 		}
 		return null;
+	}
+
+	private noteFrontmatter(book: Book): Frontmatter | undefined {
+		const file = this.app.vault.getAbstractFileByPath(book.filePath);
+		if (!(file instanceof TFile)) return undefined;
+		return this.app.metadataCache.getFileCache(file)?.frontmatter as Frontmatter | undefined;
+	}
+
+	/** Property names the library manages itself (and edits with dedicated fields). */
+	private managedKeys(): Set<string> {
+		const names = [
+			"title",
+			"tags",
+			"tag",
+			"aliases",
+			"cssclasses",
+			"position",
+			this.settings.propAuthor,
+			this.settings.propStatus,
+			...splitList(this.settings.propCover),
+			...this.settings.readers.map((r) => this.readerProperty(r)),
+		];
+		return new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean));
+	}
+
+	/** The note's other properties (e.g. Nazionalità), as editable text. */
+	getOtherProperties(book: Book): EditableProperty[] {
+		const fm = this.noteFrontmatter(book);
+		if (!fm) return [];
+		const managed = this.managedKeys();
+		return Object.keys(fm)
+			.filter((k) => !managed.has(k.toLowerCase()))
+			.filter((k) => typeof fm[k] !== "object" || fm[k] === null || Array.isArray(fm[k]))
+			.map((key) => ({ key, value: toText(fm[key]) }));
+	}
+
+	hasTitleProperty(book: Book): boolean {
+		return findKey(this.noteFrontmatter(book), "title") !== undefined;
+	}
+
+	/** Writes edited fields into the note's properties. */
+	async writeFields(book: Book, changes: NoteFieldChanges): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(book.filePath);
+		if (!(file instanceof TFile)) return;
+		const settings = this.settings;
+
+		await this.app.fileManager.processFrontMatter(file, (fm: Frontmatter) => {
+			if (changes.title !== undefined) {
+				const key = findKey(fm, "title");
+				if (key !== undefined) fm[key] = changes.title;
+			}
+
+			if (changes.author !== undefined && settings.propAuthor.trim()) {
+				const key = findKey(fm, settings.propAuthor) ?? settings.propAuthor.trim();
+				const old = fm[key];
+				const names = splitList(changes.author);
+				// Keep the note's style: links stay links, lists stay lists.
+				const usesLinks = toText(old).includes("[[") || old === undefined || (Array.isArray(old) && old.length === 0);
+				const values = names.map((n) => (usesLinks && !n.includes("[[") ? `[[${n}]]` : n));
+				if (Array.isArray(old) || old === undefined || values.length > 1) fm[key] = values;
+				else fm[key] = values[0] ?? null;
+			}
+
+			if (changes.tags !== undefined) {
+				const key = findKey(fm, "tags") ?? "tags";
+				fm[key] = changes.tags;
+			}
+
+			if (changes.cover !== undefined) {
+				const names = splitList(settings.propCover);
+				const key = names.map((n) => findKey(fm, n)).find((k) => k !== undefined) ?? names[0];
+				if (key) {
+					const { coverType, cover } = changes.cover;
+					fm[key] = coverType === "url" ? cover : coverType === "vault" ? `[[${cover}]]` : null;
+				}
+			}
+
+			for (const [key, text] of Object.entries(changes.props ?? {})) {
+				const old = fm[key];
+				const trimmed = text.trim();
+				if (Array.isArray(old)) fm[key] = splitList(trimmed);
+				else if (!trimmed) fm[key] = null;
+				else if (typeof old === "number" && !isNaN(Number(trimmed))) fm[key] = Number(trimmed);
+				else if (typeof old === "boolean" && /^(true|false)$/i.test(trimmed)) fm[key] = /^true$/i.test(trimmed);
+				else fm[key] = trimmed;
+			}
+		});
+	}
+
+	/** Renames the note to match a new title (links to it are updated by Obsidian). */
+	async renameNote(book: Book, title: string): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(book.filePath);
+		if (!(file instanceof TFile)) return;
+		const safe = title.replace(/[\\/:*?"<>|#^[\]]/g, "").trim();
+		if (!safe || safe === file.basename) return;
+		const dir = file.parent && file.parent.path !== "/" ? `${file.parent.path}/` : "";
+		const target = normalizePath(`${dir}${safe}.${file.extension}`);
+		if (this.app.vault.getAbstractFileByPath(target)) {
+			throw new Error(`A note called "${safe}" already exists`);
+		}
+		await this.app.fileManager.renameFile(file, target);
 	}
 
 	/** Writes the readers' dates and the overall Status back into the note. */
