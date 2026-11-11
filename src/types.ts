@@ -35,6 +35,8 @@ export interface Book {
 	totalPages: number | null;
 	/** IDs of the readers (see settings) who finished this book. */
 	finishedBy: string[];
+	/** When each reader finished the book (reader id -> timestamp). May be missing for older entries. */
+	finishedDates: Record<string, number>;
 }
 
 export interface Reader {
@@ -44,7 +46,7 @@ export interface Reader {
 
 export type NewBookInput = Omit<Book, "id" | "dateAdded" | "dateModified">;
 
-export type SortKey = "title" | "author" | "dateAdded" | "lastOpened" | "progress" | "finishedBy";
+export type SortKey = "title" | "author" | "dateAdded" | "lastOpened" | "progress" | "finishedBy" | "dateFinished";
 export type SortDirection = "asc" | "desc";
 export type StatusFilter = "all" | ReadingStatus;
 export type CategoryFilter = "all" | BookCategory;

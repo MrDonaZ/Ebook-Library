@@ -12,7 +12,7 @@ import {
 } from "../types";
 import { BookModal } from "../modals/BookModal";
 import { ConfirmModal } from "../modals/ConfirmModal";
-import { debounce, formatRelativeDate, placeholderGradient } from "../utils";
+import { debounce, formatDate, formatRelativeDate, placeholderGradient } from "../utils";
 
 export const VIEW_TYPE_LIBRARY = "ebook-library-view";
 
@@ -23,6 +23,7 @@ const SORT_OPTIONS: [SortKey, string][] = [
 	["lastOpened", "Recently opened"],
 	["progress", "Progress"],
 	["finishedBy", "Finished by"],
+	["dateFinished", "Date finished"],
 ];
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
@@ -471,8 +472,25 @@ export class LibraryView extends ItemView {
 				.filter((n) => n)
 				.sort((x, y) => x.localeCompare(y))
 				.join(", ");
+		// With a reader selected in the filter, sort by that reader's date; otherwise by the latest one.
+		const finishedDate = (book: Book): number | null => {
+			if (this.readerFilter !== "all" && this.readerFilter !== "none") {
+				return book.finishedDates[this.readerFilter] ?? null;
+			}
+			const dates = book.finishedBy
+				.map((id) => book.finishedDates[id])
+				.filter((d): d is number => typeof d === "number");
+			return dates.length > 0 ? Math.max(...dates) : null;
+		};
 		books.sort((a, b) => {
 			switch (key) {
+				case "dateFinished": {
+					const da = finishedDate(a);
+					const db = finishedDate(b);
+					// Books without a finish date always go last.
+					if (da === null || db === null) return da === db ? 0 : da !== null ? -1 : 1;
+					return (da - db) * dir;
+				}
 				case "finishedBy": {
 					const la = finishedLabel(a);
 					const lb = finishedLabel(b);
@@ -572,12 +590,15 @@ export class LibraryView extends ItemView {
 		for (const readerId of book.finishedBy) {
 			const name = this.plugin.getReaderName(readerId);
 			if (!name) continue;
+			const date = book.finishedDates[readerId];
+			const tooltip = date ? `Finished by ${name} on ${formatDate(date)}` : `Finished by ${name}`;
 			const pill = tagsRow.createSpan({
 				cls: "el-tag-pill el-tag-pill-reader",
-				attr: { "aria-label": `Finished by ${name}`, title: `Finished by ${name}` },
+				attr: { "aria-label": tooltip, title: tooltip },
 			});
 			setIcon(pill.createSpan({ cls: "el-tag-pill-reader-icon" }), "check");
 			pill.appendText(name);
+			if (date) pill.createSpan({ cls: "el-tag-pill-reader-date", text: formatDate(date) });
 		}
 		if (book.lastOpened) {
 			tagsRow.createSpan({ cls: "el-card-last-opened", text: formatRelativeDate(book.lastOpened) });

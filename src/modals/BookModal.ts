@@ -9,7 +9,7 @@ import {
 	NewBookInput,
 	ReadingStatus,
 } from "../types";
-import { clamp, getBasename, placeholderGradient } from "../utils";
+import { clamp, fromDateInputValue, getBasename, placeholderGradient, toDateInputValue } from "../utils";
 import { ConfirmModal } from "./ConfirmModal";
 import { FileSuggestModal } from "./FileSuggestModal";
 import { PromptModal } from "./PromptModal";
@@ -33,6 +33,7 @@ export class BookModal extends Modal {
 	private tags: string[];
 	private totalPages: number | null;
 	private finishedBy: string[];
+	private finishedDates: Record<string, number>;
 	private coverType: CoverType;
 	private cover: string;
 
@@ -66,6 +67,7 @@ export class BookModal extends Modal {
 		this.tags = existing ? [...existing.tags] : [];
 		this.totalPages = existing?.totalPages ?? null;
 		this.finishedBy = existing ? [...existing.finishedBy] : [];
+		this.finishedDates = existing ? { ...existing.finishedDates } : {};
 		this.coverType = existing?.coverType ?? "none";
 		this.cover = existing?.cover ?? "";
 	}
@@ -384,17 +386,45 @@ export class BookModal extends Modal {
 		if (readers.length === 0) return;
 		const row = form.createDiv({ cls: "el-field" });
 		row.createDiv({ cls: "el-field-label", text: "Finished by" });
-		row.createDiv({ cls: "el-field-desc", text: "Who has finished this book. Readers are configured in settings." });
+		row.createDiv({
+			cls: "el-field-desc",
+			text: "Who has finished this book, and when. Readers are configured in settings.",
+		});
 		const control = row.createDiv({ cls: "el-field-control el-reader-checkboxes" });
 		for (const reader of readers) {
-			const label = control.createEl("label", { cls: "el-reader-checkbox" });
+			const readerRow = control.createDiv({ cls: "el-reader-row" });
+			const label = readerRow.createEl("label", { cls: "el-reader-checkbox" });
 			const checkbox = label.createEl("input", { type: "checkbox" });
 			checkbox.checked = this.finishedBy.includes(reader.id);
 			label.createSpan({ text: reader.name });
+
+			const dateInput = readerRow.createEl("input", {
+				type: "date",
+				cls: "el-text-input el-reader-date",
+				attr: { "aria-label": `Date ${reader.name} finished this book` },
+			});
+			const existingDate = this.finishedDates[reader.id];
+			if (existingDate) dateInput.value = toDateInputValue(existingDate);
+			dateInput.disabled = !checkbox.checked;
+			dateInput.addEventListener("change", () => {
+				const ts = fromDateInputValue(dateInput.value);
+				if (ts === null) delete this.finishedDates[reader.id];
+				else this.finishedDates[reader.id] = ts;
+			});
+
 			checkbox.addEventListener("change", () => {
 				this.finishedBy = checkbox.checked
 					? [...this.finishedBy.filter((id) => id !== reader.id), reader.id]
 					: this.finishedBy.filter((id) => id !== reader.id);
+				dateInput.disabled = !checkbox.checked;
+				if (checkbox.checked) {
+					// Default to today; the user can change it.
+					if (!this.finishedDates[reader.id]) this.finishedDates[reader.id] = Date.now();
+					dateInput.value = toDateInputValue(this.finishedDates[reader.id]);
+				} else {
+					delete this.finishedDates[reader.id];
+					dateInput.value = "";
+				}
 				// Someone finished it: the book is completed.
 				if (checkbox.checked && this.status !== "completed") {
 					this.status = "completed";
@@ -504,6 +534,7 @@ export class BookModal extends Modal {
 			rating: this.rating,
 			totalPages: this.totalPages,
 			finishedBy: this.finishedBy,
+			finishedDates: this.finishedDates,
 			lastOpened: this.existing?.lastOpened ?? null,
 		};
 

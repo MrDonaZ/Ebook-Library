@@ -76,6 +76,7 @@ export default class EbookLibraryPlugin extends Plugin {
 			: DEFAULT_SETTINGS.readers.map((r) => ({ ...r }));
 		for (const book of this.settings.books) {
 			if (!Array.isArray(book.finishedBy)) book.finishedBy = [];
+			if (!book.finishedDates || typeof book.finishedDates !== "object") book.finishedDates = {};
 		}
 	}
 
@@ -156,7 +157,10 @@ export default class EbookLibraryPlugin extends Plugin {
 	async toggleFinishedBy(book: Book, readerId: string): Promise<void> {
 		const has = book.finishedBy.includes(readerId);
 		const finishedBy = has ? book.finishedBy.filter((id) => id !== readerId) : [...book.finishedBy, readerId];
-		const changes: Partial<Book> = { finishedBy };
+		const finishedDates = { ...book.finishedDates };
+		if (has) delete finishedDates[readerId];
+		else finishedDates[readerId] = Date.now();
+		const changes: Partial<Book> = { finishedBy, finishedDates };
 		if (!has && book.status !== "completed") {
 			changes.status = "completed";
 			changes.progress = 100;
@@ -174,6 +178,7 @@ export default class EbookLibraryPlugin extends Plugin {
 		this.settings.readers = this.settings.readers.filter((r) => r.id !== id);
 		for (const book of this.settings.books) {
 			book.finishedBy = book.finishedBy.filter((r) => r !== id);
+			delete book.finishedDates[id];
 		}
 		await this.saveSettings();
 		this.refreshViews();

@@ -47,6 +47,28 @@ export function formatRelativeDate(timestamp: number | null): string {
 	});
 }
 
+export function formatDate(timestamp: number): string {
+	return new Date(timestamp).toLocaleDateString(undefined, {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+	});
+}
+
+/** Timestamp -> "YYYY-MM-DD" in local time, for <input type="date">. */
+export function toDateInputValue(timestamp: number): string {
+	const d = new Date(timestamp);
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** "YYYY-MM-DD" -> timestamp at local midnight, or null if invalid. */
+export function fromDateInputValue(value: string): number | null {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+	if (!m) return null;
+	return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+}
+
 export function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
 }
