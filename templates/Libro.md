@@ -3,7 +3,7 @@ Author: []
 Fabrizio:
 Nadia:
 Status: Da leggere
-Nazionalità: []
+Nazionalità autore: []
 banner:
 tags: []
 ---

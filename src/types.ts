@@ -103,7 +103,7 @@ export const DEFAULT_SETTINGS: EbookLibrarySettings = {
 	propCover: "cover, banner, image",
 	propStatus: "Status",
 	statusCompleted: "Letto",
-	statusReading: "In lettura",
+	statusReading: "In corso, In lettura",
 	statusUnread: "Da leggere",
 };
 

@@ -54,7 +54,7 @@ Point the plugin at a folder (Settings → Book notes → Book folder) and every
 
 - Title, author (links like `[[Author]]` are shown as names), tags and cover come from the note's properties. The cover is read from `cover`, `banner` or `image` (configurable), falling back to the first image in the note.
 - Each reader has a date property named after them (e.g. `Fabrizio: 2026-08-28`): a date means that reader finished the book.
-- The `Status` property covers everyone else: "In lettura" means they are reading it; "Letto" with no dates means everyone finished it. The accepted values are configurable.
+- The `Status` property covers everyone else: "In corso" (or "In lettura") means they are reading it; "Letto" with no dates means everyone finished it. The accepted values are configurable.
 - Everything can be edited from the library (Edit details): title (renames the note), author, tags, cover, the other note properties, and each reader's status and date. Changes are written into the note, and editing the note updates the library.
 - On covers, each reader who started or finished a book appears as a small avatar; tap it to change that reader's status.
 

@@ -80,7 +80,7 @@ export class EbookLibrarySettingTab extends PluginSettingTab {
 					},
 					{
 						name: "Status values: reading",
-						control: { type: "text", key: "statusReading", placeholder: "In lettura" },
+						control: { type: "text", key: "statusReading", placeholder: "In corso" },
 					},
 					{
 						name: "Status values: to read",
