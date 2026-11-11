@@ -311,11 +311,10 @@ export class NoteSync {
 
 			if (changes.cover !== undefined) {
 				const names = splitList(settings.propCover);
-				const key = names.map((n) => findKey(fm, n)).find((k) => k !== undefined) ?? names[0];
-				if (key) {
-					const { coverType, cover } = changes.cover;
-					fm[key] = coverType === "url" ? cover : coverType === "vault" ? `[[${cover}]]` : null;
-				}
+				const keys = names.map((n) => findKey(fm, n)).filter((k): k is string => k !== undefined);
+				// Write where the cover is read from: the first filled property, else the first existing one.
+				const key = keys.find((k) => toText(fm[k]).trim()) ?? keys[0] ?? names[0];
+				if (key) fm[key] = this.coverValue(file, key, toText(fm[key]).trim(), changes.cover);
 			}
 
 			for (const [key, text] of Object.entries(changes.props ?? {})) {
@@ -328,6 +327,25 @@ export class NoteSync {
 				else fm[key] = trimmed;
 			}
 		});
+	}
+
+	/**
+	 * Property value for a cover. Vault images use the shortest link. "banner" always
+	 * gets an embed ("![[img.jpg]]"), which is what banner plugins (Banners, Pixel
+	 * Banner) expect; other properties keep the style they already used.
+	 */
+	private coverValue(
+		note: TFile,
+		key: string,
+		previous: string,
+		cover: { coverType: CoverType; cover: string }
+	): string | null {
+		if (cover.coverType === "url") return cover.cover;
+		if (cover.coverType !== "vault" || !cover.cover) return null;
+		const image = this.app.vault.getAbstractFileByPath(cover.cover);
+		const linktext = image instanceof TFile ? this.app.metadataCache.fileToLinktext(image, note.path, false) : cover.cover;
+		const embed = key.toLowerCase() === "banner" || previous.startsWith("!");
+		return `${embed ? "!" : ""}[[${linktext}]]`;
 	}
 
 	/** Renames the note to match a new title (links to it are updated by Obsidian). */
