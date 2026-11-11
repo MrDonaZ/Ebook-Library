@@ -738,6 +738,22 @@
 	border: 1px solid var(--el-surface-border);
 }
 
+.el-tag-pill-reader {
+	gap: 3px;
+	color: var(--color-green, var(--el-text-muted));
+	background: rgba(var(--color-green-rgb, 0, 160, 80), 0.1);
+	border-color: rgba(var(--color-green-rgb, 0, 160, 80), 0.3);
+}
+
+.el-tag-pill-reader-icon {
+	display: inline-flex;
+}
+
+.el-tag-pill-reader-icon svg {
+	width: 11px;
+	height: 11px;
+}
+
 .el-cover-placeholder {
 	width: 100%;
 	height: 100%;
@@ -963,6 +979,19 @@
 .el-field-control {
 	width: 100%;
 }
+.el-reader-checkboxes {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+}
+
+.el-reader-checkbox {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+}
+
 .el-field-control-row {
 	display: flex;
 	align-items: center;

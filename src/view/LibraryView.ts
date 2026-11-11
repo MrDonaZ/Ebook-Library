@@ -6,6 +6,7 @@ import {
 	CATEGORY_META,
 	CATEGORY_ORDER,
 	CategoryFilter,
+	ReaderFilter,
 	SortKey,
 	StatusFilter,
 } from "../types";
@@ -21,6 +22,7 @@ const SORT_OPTIONS: [SortKey, string][] = [
 	["author", "Author"],
 	["lastOpened", "Recently opened"],
 	["progress", "Progress"],
+	["finishedBy", "Finished by"],
 ];
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
@@ -43,12 +45,14 @@ export class LibraryView extends ItemView {
 	private statusFilter: StatusFilter = "all";
 	private categoryFilter: CategoryFilter = "all";
 	private tagFilter = "all";
+	private readerFilter: ReaderFilter = "all";
 
 	private headerTitleEl!: HTMLElement;
 	private statsEl!: HTMLElement;
 	private searchInputEl!: HTMLInputElement;
 	private categorySelectEl!: HTMLSelectElement;
 	private tagSelectEl!: HTMLSelectElement;
+	private readerSelectEl!: HTMLSelectElement;
 	private sortSelectEl!: HTMLSelectElement;
 	private sortDirBtn!: HTMLElement;
 	private densityGroupEl!: HTMLElement;
@@ -143,6 +147,12 @@ export class LibraryView extends ItemView {
 			this.render();
 		});
 
+		this.readerSelectEl = filters.createEl("select", { cls: "el-select" });
+		this.readerSelectEl.addEventListener("change", () => {
+			this.readerFilter = this.readerSelectEl.value;
+			this.render();
+		});
+
 		this.sortSelectEl = filters.createEl("select", { cls: "el-select" });
 		for (const [key, label] of SORT_OPTIONS) {
 			this.sortSelectEl.createEl("option", { value: key, text: label });
@@ -213,6 +223,7 @@ export class LibraryView extends ItemView {
 	render() {
 		this.headerTitleEl.setText(this.plugin.settings.libraryTitle);
 		this.populateTagOptions();
+		this.populateReaderOptions();
 		this.updateActiveTab();
 		this.updateSortDirButton();
 		this.updateDensityToggle();
@@ -320,6 +331,20 @@ export class LibraryView extends ItemView {
 		this.tagSelectEl.value = this.tagFilter;
 	}
 
+	private populateReaderOptions() {
+		const current = this.readerFilter;
+		this.readerSelectEl.empty();
+		this.readerSelectEl.createEl("option", { value: "all", text: "All readers" });
+		for (const reader of this.plugin.settings.readers) {
+			this.readerSelectEl.createEl("option", { value: reader.id, text: `Finished by ${reader.name}` });
+		}
+		this.readerSelectEl.createEl("option", { value: "none", text: "Finished by nobody" });
+		const values = Array.from(this.readerSelectEl.options).map((o) => o.value);
+		this.readerFilter = values.includes(current) ? current : "all";
+		this.readerSelectEl.value = this.readerFilter;
+		this.readerSelectEl.toggle(this.plugin.settings.readers.length > 0);
+	}
+
 	private updateActiveTab() {
 		const counts = this.getStatusCounts();
 		this.tabsEl.querySelectorAll(".el-tab").forEach((el) => {
@@ -381,6 +406,7 @@ export class LibraryView extends ItemView {
 			this.statusFilter !== "all" ||
 			this.categoryFilter !== "all" ||
 			this.tagFilter !== "all" ||
+			this.readerFilter !== "all" ||
 			!!this.searchQuery;
 
 		if (total === 0 || !filtersActive) {
@@ -401,6 +427,11 @@ export class LibraryView extends ItemView {
 		}
 		if (this.tagFilter !== "all") {
 			books = books.filter((b) => b.tags.includes(this.tagFilter));
+		}
+		if (this.readerFilter === "none") {
+			books = books.filter((b) => b.finishedBy.length === 0);
+		} else if (this.readerFilter !== "all") {
+			books = books.filter((b) => b.finishedBy.includes(this.readerFilter));
 		}
 		if (this.searchQuery) {
 			const q = this.searchQuery;
@@ -434,8 +465,21 @@ export class LibraryView extends ItemView {
 
 		const dir = this.plugin.settings.sortDirection === "asc" ? 1 : -1;
 		const key = this.plugin.settings.sortKey;
+		const finishedLabel = (book: Book) =>
+			book.finishedBy
+				.map((id) => this.plugin.getReaderName(id))
+				.filter((n) => n)
+				.sort((x, y) => x.localeCompare(y))
+				.join(", ");
 		books.sort((a, b) => {
 			switch (key) {
+				case "finishedBy": {
+					const la = finishedLabel(a);
+					const lb = finishedLabel(b);
+					// Books finished by nobody always go last.
+					if (!la || !lb) return la === lb ? 0 : la ? -1 : 1;
+					return la.localeCompare(lb) * dir || a.title.localeCompare(b.title);
+				}
 				case "title":
 					return a.title.localeCompare(b.title) * dir;
 				case "author":
@@ -476,7 +520,9 @@ export class LibraryView extends ItemView {
 				this.statusFilter = "all";
 				this.categoryFilter = "all";
 				this.tagFilter = "all";
+				this.readerFilter = "all";
 				this.searchInputEl.value = "";
+				this.readerSelectEl.value = "all";
 				this.categorySelectEl.value = "all";
 				this.tagSelectEl.value = "all";
 				this.render();
@@ -523,6 +569,16 @@ export class LibraryView extends ItemView {
 		const tagsRow = info.createDiv({ cls: "el-card-tags" });
 		const categoryPill = tagsRow.createSpan({ cls: "el-tag-pill el-tag-pill-category" });
 		categoryPill.appendText(CATEGORY_META[book.category]?.label ?? book.category);
+		for (const readerId of book.finishedBy) {
+			const name = this.plugin.getReaderName(readerId);
+			if (!name) continue;
+			const pill = tagsRow.createSpan({
+				cls: "el-tag-pill el-tag-pill-reader",
+				attr: { "aria-label": `Finished by ${name}`, title: `Finished by ${name}` },
+			});
+			setIcon(pill.createSpan({ cls: "el-tag-pill-reader-icon" }), "check");
+			pill.appendText(name);
+		}
 		if (book.lastOpened) {
 			tagsRow.createSpan({ cls: "el-card-last-opened", text: formatRelativeDate(book.lastOpened) });
 		}
@@ -621,6 +677,21 @@ export class LibraryView extends ItemView {
 					void this.plugin.updateBook(book.id, { status: "completed", progress: 100 });
 				})
 		);
+
+		if (this.plugin.settings.readers.length > 0) {
+			menu.addSeparator();
+			for (const reader of this.plugin.settings.readers) {
+				menu.addItem((item) =>
+					item
+						.setTitle(`Finished by ${reader.name}`)
+						.setIcon("user-check")
+						.setChecked(book.finishedBy.includes(reader.id))
+						.onClick(() => {
+							void this.plugin.toggleFinishedBy(book, reader.id);
+						})
+				);
+			}
+		}
 
 		menu.addSeparator();
 		menu.addItem((item) =>

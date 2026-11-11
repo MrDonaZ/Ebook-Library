@@ -32,6 +32,7 @@ export class BookModal extends Modal {
 	private description: string;
 	private tags: string[];
 	private totalPages: number | null;
+	private finishedBy: string[];
 	private coverType: CoverType;
 	private cover: string;
 
@@ -64,6 +65,7 @@ export class BookModal extends Modal {
 		this.description = existing?.description ?? "";
 		this.tags = existing ? [...existing.tags] : [];
 		this.totalPages = existing?.totalPages ?? null;
+		this.finishedBy = existing ? [...existing.finishedBy] : [];
 		this.coverType = existing?.coverType ?? "none";
 		this.cover = existing?.cover ?? "";
 	}
@@ -212,6 +214,7 @@ export class BookModal extends Modal {
 
 		this.addSectionTitle(form, "Progress & rating");
 		this.buildStatusField(form);
+		this.buildFinishedByField(form);
 		this.buildTotalPagesField(form);
 		this.buildRatingField(form);
 	}
@@ -376,6 +379,31 @@ export class BookModal extends Modal {
 		});
 	}
 
+	private buildFinishedByField(form: HTMLElement) {
+		const readers = this.plugin.settings.readers;
+		if (readers.length === 0) return;
+		const row = form.createDiv({ cls: "el-field" });
+		row.createDiv({ cls: "el-field-label", text: "Finished by" });
+		row.createDiv({ cls: "el-field-desc", text: "Who has finished this book. Readers are configured in settings." });
+		const control = row.createDiv({ cls: "el-field-control el-reader-checkboxes" });
+		for (const reader of readers) {
+			const label = control.createEl("label", { cls: "el-reader-checkbox" });
+			const checkbox = label.createEl("input", { type: "checkbox" });
+			checkbox.checked = this.finishedBy.includes(reader.id);
+			label.createSpan({ text: reader.name });
+			checkbox.addEventListener("change", () => {
+				this.finishedBy = checkbox.checked
+					? [...this.finishedBy.filter((id) => id !== reader.id), reader.id]
+					: this.finishedBy.filter((id) => id !== reader.id);
+				// Someone finished it: the book is completed.
+				if (checkbox.checked && this.status !== "completed") {
+					this.status = "completed";
+					if (this.statusDropdownEl) this.statusDropdownEl.value = "completed";
+				}
+			});
+		}
+	}
+
 	private buildTotalPagesField(form: HTMLElement) {
 		const row = form.createDiv({ cls: "el-field" });
 		row.createDiv({ cls: "el-field-label", text: "Total pages" });
@@ -475,6 +503,7 @@ export class BookModal extends Modal {
 			progress: this.status === "completed" ? 100 : this.existing?.progress ?? 0,
 			rating: this.rating,
 			totalPages: this.totalPages,
+			finishedBy: this.finishedBy,
 			lastOpened: this.existing?.lastOpened ?? null,
 		};
 

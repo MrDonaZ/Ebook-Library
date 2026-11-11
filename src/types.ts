@@ -33,14 +33,23 @@ export interface Book {
 	dateModified: number;
 	lastOpened: number | null;
 	totalPages: number | null;
+	/** IDs of the readers (see settings) who finished this book. */
+	finishedBy: string[];
+}
+
+export interface Reader {
+	id: string;
+	name: string;
 }
 
 export type NewBookInput = Omit<Book, "id" | "dateAdded" | "dateModified">;
 
-export type SortKey = "title" | "author" | "dateAdded" | "lastOpened" | "progress";
+export type SortKey = "title" | "author" | "dateAdded" | "lastOpened" | "progress" | "finishedBy";
 export type SortDirection = "asc" | "desc";
 export type StatusFilter = "all" | ReadingStatus;
 export type CategoryFilter = "all" | BookCategory;
+/** "all", "none" (finished by nobody) or a reader id. */
+export type ReaderFilter = string;
 export type CardSize = "small" | "medium" | "large";
 
 export interface EbookLibrarySettings {
@@ -50,6 +59,7 @@ export interface EbookLibrarySettings {
 	sortKey: SortKey;
 	sortDirection: SortDirection;
 	openOnStartup: boolean;
+	readers: Reader[];
 }
 
 export const DEFAULT_SETTINGS: EbookLibrarySettings = {
@@ -59,6 +69,10 @@ export const DEFAULT_SETTINGS: EbookLibrarySettings = {
 	sortKey: "dateAdded",
 	sortDirection: "desc",
 	openOnStartup: false,
+	readers: [
+		{ id: "reader-1", name: "Reader 1" },
+		{ id: "reader-2", name: "Reader 2" },
+	],
 };
 
 export interface CategoryMeta {

@@ -44,6 +44,7 @@ Give each title the context it deserves with:
 - Descriptions and ratings
 - Unread, Reading, and Completed statuses
 - Optional total page counts
+- "Finished by" readers, for libraries shared between several people (set up the readers in the plugin settings)
 
 <img width="722" height="930" alt="image" src="https://github.com/user-attachments/assets/271b73f3-0b1a-4be9-ae2f-1a38e341c9f3" />
 
@@ -52,9 +53,9 @@ Give each title the context it deserves with:
 Use the library toolbar to:
 
 - Search across your entire collection
-- Filter by category or tag
+- Filter by category, tag, or by who finished the book
 - Switch between All, Unread, Reading, and Completed
-- Sort by title, author, date added, recently opened, or reading progress
+- Sort by title, author, date added, recently opened, reading progress, or who finished the book
 - Choose a compact, comfortable, or spacious card size
 
 <img width="1727" height="971" alt="image" src="https://github.com/user-attachments/assets/0d1e2a50-2f8d-4d03-b0eb-b3ecb001dc9d" />

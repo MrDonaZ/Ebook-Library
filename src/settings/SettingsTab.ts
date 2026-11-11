@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, SettingDefinitionItem } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
 import type EbookLibraryPlugin from "../main";
 import { ConfirmModal } from "../modals/ConfirmModal";
 
@@ -37,6 +37,41 @@ export class EbookLibrarySettingTab extends PluginSettingTab {
 					type: "toggle",
 					key: "openOnStartup",
 				},
+			},
+			{
+				type: "list",
+				heading: "Readers",
+				emptyState: "No readers yet. Add one to track who finished each book.",
+				addItem: {
+					name: "Add reader",
+					action: () => {
+						const n = this.plugin.settings.readers.length + 1;
+						void this.plugin.addReader(`Reader ${n}`).then(() => this.update());
+					},
+				},
+				onDelete: (index: number) => {
+					const reader = this.plugin.settings.readers[index];
+					if (!reader) return;
+					void this.plugin.removeReader(reader.id).then(() => this.update());
+				},
+				items: this.plugin.settings.readers.map((reader) => ({
+					name: reader.name,
+					render: (setting: Setting) => {
+						setting.setName("");
+						setting.addText((text) =>
+							text
+								.setPlaceholder("Reader name")
+								.setValue(reader.name)
+								.onChange(async (value) => {
+									const name = value.trim();
+									if (!name) return;
+									reader.name = name;
+									await this.plugin.saveSettings();
+									this.plugin.refreshViews();
+								})
+						);
+					},
+				})),
 			},
 			{
 				type: "group",

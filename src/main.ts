@@ -70,6 +70,13 @@ export default class EbookLibraryPlugin extends Plugin {
 		const data = (await this.loadData()) as Partial<EbookLibrarySettings> | null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, data ?? {});
 		if (!Array.isArray(this.settings.books)) this.settings.books = [];
+		// Clone the defaults so mutations never touch DEFAULT_SETTINGS.
+		this.settings.readers = Array.isArray(data?.readers)
+			? data.readers
+			: DEFAULT_SETTINGS.readers.map((r) => ({ ...r }));
+		for (const book of this.settings.books) {
+			if (!Array.isArray(book.finishedBy)) book.finishedBy = [];
+		}
 	}
 
 	async saveSettings() {
@@ -139,6 +146,37 @@ export default class EbookLibraryPlugin extends Plugin {
 			for (const tag of book.tags) set.add(tag);
 		}
 		return Array.from(set).sort((a, b) => a.localeCompare(b));
+	}
+
+	getReaderName(id: string): string {
+		return this.settings.readers.find((r) => r.id === id)?.name ?? "";
+	}
+
+	/** Toggles whether a reader finished a book. Marking as finished also marks the book completed. */
+	async toggleFinishedBy(book: Book, readerId: string): Promise<void> {
+		const has = book.finishedBy.includes(readerId);
+		const finishedBy = has ? book.finishedBy.filter((id) => id !== readerId) : [...book.finishedBy, readerId];
+		const changes: Partial<Book> = { finishedBy };
+		if (!has && book.status !== "completed") {
+			changes.status = "completed";
+			changes.progress = 100;
+		}
+		await this.updateBook(book.id, changes);
+	}
+
+	async addReader(name: string): Promise<void> {
+		this.settings.readers.push({ id: generateId(), name });
+		await this.saveSettings();
+		this.refreshViews();
+	}
+
+	async removeReader(id: string): Promise<void> {
+		this.settings.readers = this.settings.readers.filter((r) => r.id !== id);
+		for (const book of this.settings.books) {
+			book.finishedBy = book.finishedBy.filter((r) => r !== id);
+		}
+		await this.saveSettings();
+		this.refreshViews();
 	}
 
 	async openBook(book: Book): Promise<void> {
